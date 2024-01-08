@@ -98,7 +98,7 @@ class IndexBuilder {
     std::string _data_file;
     std::string _db_data_path;
     std::string _db_name;
-    uint _threads = 1;
+    uint _threads = 3;
 
     // uint _btree_file_size = 0;
     uint _btree_pos_file_size = 0;
@@ -267,6 +267,42 @@ class IndexBuilder {
     void build_btree(std::vector<pair<entity_set, entity_set>>& predicate_entity_sets) {
         auto beg = std::chrono::high_resolution_clock::now();
 
+        if (_threads != 1)
+            multi_thread_build_btree(predicate_entity_sets);
+        else
+            single_thread_build_btree(predicate_entity_sets);
+
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> diff = end - beg;
+        std::cout << "build index takes " << diff.count() << " ms.                 " << std::endl;
+    }
+
+    void single_thread_build_btree(std::vector<pair<entity_set, entity_set>>& predicate_entity_sets) {
+        uint ps_set_size;
+        uint po_set_size;
+        uint pid = 0;
+        double finished = 0;
+        std::string info = "building predicate to entity index: ";
+        progress(finished, 0, info);
+        for (uint tid = 0; tid < _predicate_cnt; tid++) {
+            pid = _predicate_rank[tid].first;
+
+            for (const auto& so : _pso[pid]) {
+                predicate_entity_sets[pid - 1].first.insert(so.first);
+                predicate_entity_sets[pid - 1].second.insert(so.second);
+            }
+
+            ps_set_size = predicate_entity_sets[pid - 1].first.size();
+            po_set_size = predicate_entity_sets[pid - 1].second.size();
+            _btrees_file_size += ps_set_size * 4 + po_set_size * 4;
+            _so_predicate_array_file_size += ps_set_size * 3 * 4;
+            _os_predicate_array_file_size += po_set_size * 3 * 4;
+
+            progress(finished, pid, info);
+        }
+    }
+
+    void multi_thread_build_btree(std::vector<pair<entity_set, entity_set>>& predicate_entity_sets) {
         std::vector<pair<uint, uint>> task_status(_threads);
 
         uint pid = 0;
@@ -311,12 +347,8 @@ class IndexBuilder {
                 }
             }
 
-            usleep(100000);
+            usleep(10000);
         }
-
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> diff = end - beg;
-        std::cout << "build index takes " << diff.count() << " ms.                 " << std::endl;
     }
 
     void sub_build_btree_task(uint pid, uint* finish, pair<entity_set, entity_set>* s_o_set) {
@@ -411,6 +443,61 @@ class IndexBuilder {
     void build_entity_to_entity(std::vector<std::pair<uint, uint>>& predicate_array_offset) {
         auto beg = std::chrono::high_resolution_clock::now();
 
+        if (_threads != 1)
+            multi_thread_build_entity_to_entity(predicate_array_offset);
+        else
+            single_thread_build_entity_to_entity(predicate_array_offset);
+
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> diff = end - beg;
+        std::cout << "build index takes " << diff.count() << " ms.                      " << std::endl;
+    }
+
+    void single_thread_build_entity_to_entity(std::vector<std::pair<uint, uint>>& predicate_array_offset) {
+        _array_file_size = _triplet_cnt * 2 * 4;
+
+        Virtual_Memory so_predicate_array_vm =
+            Virtual_Memory(_db_data_path + "SO_PREDICATE_ARRAY", _so_predicate_array_file_size);
+        Virtual_Memory os_predicate_array_vm =
+            Virtual_Memory(_db_data_path + "OS_PREDICATE_ARRAY", _os_predicate_array_file_size);
+        Virtual_Memory arrays_vm = Virtual_Memory(_db_data_path + "ARRAYS", _array_file_size);
+
+        // [(pid, finish_flag) ,... ,(pid, finish_flag)]
+        std::vector<pair<uint, uint>> task_status(_threads);
+        flat_hash_map<uint, Node> s_to_o;
+        flat_hash_map<uint, Node> o_to_s;
+
+        uint arrays_offset = 0;
+        uint pid;
+        double finished = 0;
+        std::string info = "building entity to entity index: ";
+        progress(finished, 0, info);
+        for (uint tid = 0; tid < _predicate_cnt; tid++) {
+            pid = _predicate_rank[tid].first;
+
+            if (s_to_o.size() != 0) {
+                flat_hash_map<uint, Node>().swap(s_to_o);
+            }
+            if (o_to_s.size() != 0) {
+                flat_hash_map<uint, Node>().swap(o_to_s);
+            }
+
+            for (const auto& so : _pso[pid]) {
+                add_by_order(&s_to_o[so.first], so.second);
+                add_by_order(&o_to_s[so.second], so.first);
+            }
+
+            store_array(arrays_offset, pid, s_to_o, o_to_s, arrays_vm, so_predicate_array_vm,
+                        os_predicate_array_vm, predicate_array_offset);
+
+            flat_hash_set<pair<uint, uint>>{}.swap(_pso[pid]);
+            malloc_trim(0);
+
+            progress(finished, pid, info);
+        }
+    }
+
+    void multi_thread_build_entity_to_entity(std::vector<std::pair<uint, uint>>& predicate_array_offset) {
         _array_file_size = _triplet_cnt * 2 * 4;
 
         Virtual_Memory so_predicate_array_vm =
@@ -462,16 +549,12 @@ class IndexBuilder {
                 }
             }
 
-            usleep(100000);
+            usleep(10000);
         }
 
         so_predicate_array_vm.close_vm();
         os_predicate_array_vm.close_vm();
         arrays_vm.close_vm();
-
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> diff = end - beg;
-        std::cout << "build index takes " << diff.count() << " ms.                      " << std::endl;
     }
 
     void sub_build_entity_to_entity(uint pid,

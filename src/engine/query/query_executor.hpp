@@ -153,7 +153,6 @@ class QueryExecutor {
             } else {
                 // 补完一个查询结果
                 if (_stat.level == int(_stat.plan.size() - 1)) {
-                    // std::cout << "find one!" << std::endl;
                     _stat.result.push_back(_stat.current_tuple);
                     if (_stat.result.size() >= _p_query_plan->limit) {
                         break;

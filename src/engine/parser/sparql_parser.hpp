@@ -10,6 +10,7 @@
 #define COMPRESSED_ENCODED_TREE_INDEX_SPARQL_PARSER_HPP
 
 #include <exception>
+#include <set>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -149,18 +150,21 @@ class SPARQLParser {
         // 如果 select 后是 *，则查询结果的变量应该是三元组中出现的变量
         if (_project_variables[0] == "*") {
             _project_variables.clear();
+            std::set<std::string> variables_set;
             for (const auto& item : _triple_patterns) {
                 const auto& s = item.subj_.value_;
                 const auto& p = item.pred_.value_;
                 const auto& o = item.obj_.value_;
                 if (s[0] == '?')
-                    _project_variables.push_back(s);
+                    variables_set.insert(s);
                 if (p[0] == '?')
-                    _project_variables.push_back(p);
+                    variables_set.insert(p);
                 if (o[0] == '?')
-                    _project_variables.push_back(o);
+                    variables_set.insert(o);
             }
+            _project_variables.assign(variables_set.begin(), variables_set.end());
         }
+
     }
 
     void parse_prefix() {
