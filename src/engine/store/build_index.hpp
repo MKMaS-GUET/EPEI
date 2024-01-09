@@ -13,6 +13,11 @@
 #include <vector>
 #include "virtual_memory.hpp"
 
+
+#ifndef BUILD_INDEX_HPP
+#define BUILD_INDEX_HPP
+
+
 #define MAX_SIZE 20000
 
 namespace fs = std::filesystem;
@@ -21,6 +26,7 @@ using phmap::btree_map;
 using phmap::flat_hash_map;
 using phmap::flat_hash_set;
 using std::pair;
+
 
 class Node {
    public:
@@ -696,3 +702,5 @@ class IndexBuilder {
 
     // munmap(data, file_size);
 };
+
+#endif

@@ -6,8 +6,8 @@
  * @Description:
  */
 
-#ifndef COMPRESSED_ENCODED_TREE_INDEX_SPARQL_LEXER_HPP
-#define COMPRESSED_ENCODED_TREE_INDEX_SPARQL_LEXER_HPP
+#ifndef SPARQL_LEXER_HPP
+#define SPARQL_LEXER_HPP
 
 #include <string>
 

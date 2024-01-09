@@ -6,8 +6,8 @@
  * @Description:
  */
 
-#ifndef COMBINED_CODE_INDEX_LEAPFROG_JOIN_HPP
-#define COMBINED_CODE_INDEX_LEAPFROG_JOIN_HPP
+#ifndef LEAPFROG_JOIN_HPP
+#define LEAPFROG_JOIN_HPP
 
 #include <unistd.h>
 #include <algorithm>
@@ -16,9 +16,7 @@
 
 #include "result_vector_list.hpp"
 
-
 void leapfrog_join(Result_Vector_List& pair_begin_end, std::vector<uint>& result_set) {
-
     uint value;
 
     // Check if any index is empty => Intersection empty
@@ -76,7 +74,6 @@ void leapfrog_join(Result_Vector_List& pair_begin_end, std::vector<uint>& result
         idx++;
         idx = idx % pair_begin_end.size();
     }
-
 }
 
 std::shared_ptr<std::vector<uint>> leapfrog_join(Result_Vector_List& indexes) {

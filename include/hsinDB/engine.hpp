@@ -3,36 +3,37 @@
  * @CreateAt   : 2022/10/25
  * @Author     : Inno Fang
  * @Email      : innofang@yeah.net
- * @Description: 
+ * @Description:
  */
 
 #ifndef COMPRESSED_ENCODED_TREE_INDEX_ENGINE_HPP
 #define COMPRESSED_ENCODED_TREE_INDEX_ENGINE_HPP
 
-#include <string>
 #include <memory>
+#include <string>
 #include <vector>
-#include <hsinDB/result.hpp>
 
 namespace hsinDB {
 
 class Engine {
-private:
+   private:
     class Impl;
 
-public:
+   public:
     Engine() = delete;
 
     ~Engine() = delete;
 
-    static void Create(const std::string &db_name, const std::string &data_file);
+    static void Create(const std::string& db_name, const std::string& data_file);
 
-    static void Query(const std::string &db_name, const std::string &data_file);
+    static void Query(const std::string& db_name, const std::string& data_file);
 
-public :
+    static void Server(const std::string& port);
+
+   public:
     std::shared_ptr<Impl> _impl;
 };
 
-}
+}  // namespace hsinDB
 
-#endif //COMPRESSED_ENCODED_TREE_INDEX_ENGINE_HPP
+#endif  // COMPRESSED_ENCODED_TREE_INDEX_ENGINE_HPP

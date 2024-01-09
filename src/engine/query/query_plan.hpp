@@ -6,8 +6,8 @@
  * @Description:
  */
 
-#ifndef COMBINED_CODE_INDEX_GEN_PLAN_HPP
-#define COMBINED_CODE_INDEX_GEN_PLAN_HPP
+#ifndef QUERY_PLAN_HPP
+#define QUERY_PLAN_HPP
 
 #include <numeric>  // 包含 accumulate 函数
 #include <string>

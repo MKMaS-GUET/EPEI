@@ -13,22 +13,15 @@ void build(const std::unordered_map<std::string, std::string>& arguments) {
 }
 
 void query(const std::unordered_map<std::string, std::string>& arguments) {
-
     std::string db_name = arguments.at("name");
     std::string sparql_file = arguments.at("file");
 
     hsinDB::Engine::Query(db_name, sparql_file);
+}
 
-    // auto result = hsinDB::Engine::Query(db_name, sparql_file);
-    // std::cout << result->result_size() << " result(s)." << std::endl;
-    // std::cout << "==================================================================" << std::endl;
-    // std::copy(result->var_begin(), result->var_end(), std::ostream_iterator<std::string>(std::cout, "\t"));
-    // std::cout << std::endl;
-    // for (auto& item : *result) {
-    //     std::copy(item.begin(), item.end(), std::ostream_iterator<std::string>(std::cout, " "));
-    //     std::cout << std::endl;
-    // }
-    // std::cout << "------------------------------------------------------------------" << std::endl;
+void server(const std::unordered_map<std::string, std::string>& arguments) {
+    std::string port = arguments.at("port");
+    hsinDB::Engine::Server(port);
 }
 
 struct EnumClassHash {
@@ -44,10 +37,9 @@ std::unordered_map<ArgsParser::Command_T,
     selector;
 
 int main(int argc, char** argv) {
-    selector = {
-        {ArgsParser::Command_T::Build, &build},
-        {ArgsParser::Command_T::Query, &query},
-    };
+    selector = {{ArgsParser::Command_T::Build, &build},
+                {ArgsParser::Command_T::Query, &query},
+                {ArgsParser::Command_T::Server, &server}};
 
     auto parser = ArgsParser();
     auto command = parser.parse(argc, argv);

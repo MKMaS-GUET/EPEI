@@ -15,5 +15,5 @@ file(GLOB_RECURSE srcs CONFIGURE_DEPENDS
         tools/*.hpp)
 
 add_library(${this} STATIC ${srcs})
-target_link_libraries(${this} PRIVATE pthread stdc++fs phmap)
+target_link_libraries(${this} PRIVATE pthread stdc++fs phmap httplib nlohmann_json)
 set_target_properties(${this} PROPERTIES LINKER_LANGUAGE CXX)

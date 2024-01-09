@@ -31,8 +31,8 @@ class Index {
     Virtual_Memory _so_predicate_array;
     Virtual_Memory _arrays;
 
-    std::vector<std::shared_ptr<Result_Vector>> ps_sets;
-    std::vector<std::shared_ptr<Result_Vector>> po_sets;
+    // std::vector<std::shared_ptr<Result_Vector>> ps_sets;
+    // std::vector<std::shared_ptr<Result_Vector>> po_sets;
 
     void load_db_info() {
         Virtual_Memory vm = Virtual_Memory(_db_data_path + "DB_INFO", 9 * 4);
@@ -171,12 +171,12 @@ class Index {
     }
 
     ~Index() {
-        _btree_pos.close_vm();
-        _btrees.close_vm();
-        _predicate_array_pos.close_vm();
-        _os_predicate_array.close_vm();
-        _os_predicate_array.close_vm();
-        _arrays.close_vm();
+        close_vm();
+
+        id2entity.clear();
+        entity2id.clear();
+        id2predicate.clear();
+        predicate2id.clear();
     };
 
     uint get_entity_id(std::string entity) {
@@ -188,6 +188,12 @@ class Index {
         }
         return 0;
     }
+
+    uint get_triplet_cnt() { return _triplet_cnt; }
+
+    uint get_entity_cnt() { return _entity_cnt; }
+
+    uint get_predicate_cnt() { return _predicate_cnt; }
 
     // void pre_load_tree() {
     //     uint offset;

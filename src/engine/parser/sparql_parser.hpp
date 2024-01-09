@@ -6,8 +6,8 @@
  * @Description:
  */
 
-#ifndef COMPRESSED_ENCODED_TREE_INDEX_SPARQL_PARSER_HPP
-#define COMPRESSED_ENCODED_TREE_INDEX_SPARQL_PARSER_HPP
+#ifndef SPARQL_PARSER_HPP
+#define SPARQL_PARSER_HPP
 
 #include <exception>
 #include <set>
@@ -164,7 +164,6 @@ class SPARQLParser {
             }
             _project_variables.assign(variables_set.begin(), variables_set.end());
         }
-
     }
 
     void parse_prefix() {
@@ -426,4 +425,4 @@ class SPARQLParser {
     std::unordered_map<std::string, std::string> _prefixes;  // the registered prefixes
 };
 
-#endif  // COMPRESSED_ENCODED_TREE_INDEX_SPARQL_PARSER_HPP
+#endif  // SPARQL_PARSER_HPP

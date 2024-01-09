@@ -6,8 +6,8 @@
  * @Description:
  */
 
-#ifndef COMPRESSED_ENCODED_TREE_INDEX_ENGINE_IMPL_HPP
-#define COMPRESSED_ENCODED_TREE_INDEX_ENGINE_IMPL_HPP
+#ifndef ENGINE_IMPL_HPP
+#define ENGINE_IMPL_HPP
 
 #include <fstream>
 #include <memory>
@@ -20,6 +20,7 @@
 #include "query/query_plan.hpp"
 #include "store/build_index.hpp"
 #include "store/index.hpp"
+#include "server/server.hpp"
 
 class hsinDB::Engine::Impl {
    public:
@@ -78,6 +79,10 @@ class hsinDB::Engine::Impl {
         }
     }
 
+    void server(const std::string& port) {
+        start_server(port);
+    }
+
    private:
     std::vector<std::string> read_sparql_file(const std::string& sparql_file) {
         std::vector<std::string> sparqls;
@@ -92,7 +97,7 @@ class hsinDB::Engine::Impl {
             in.close();
         }
         sparqls.push_back(sparql);
-        
+
         return sparqls;
     }
 

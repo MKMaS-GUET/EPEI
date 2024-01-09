@@ -23,7 +23,7 @@ class ArgsParser {
         None,
         Build,
         Query,
-        Serve,
+        Server,
     };
 
     const std::string _arg_name = "name";
@@ -34,30 +34,30 @@ class ArgsParser {
 
    private:
     std::unordered_map<std::string, Command_T> _position = {
-        {"-h", Command_T::None},     {"--help", Command_T::None}, {"build", Command_T::Build},
-        {"query", Command_T::Query}, {"serve", Command_T::Serve},
+        {"-h", Command_T::None},     {"--help", Command_T::None},   {"build", Command_T::Build},
+        {"query", Command_T::Query}, {"server", Command_T::Server},
     };
 
     std::unordered_map<std::string, void (ArgsParser::*)(const std::unordered_map<std::string, std::string>&)>
         _selector = {
             {"build", &ArgsParser::build},
             {"query", &ArgsParser::query},
-            {"serve", &ArgsParser::serve},
+            {"server", &ArgsParser::server},
     };
 
     const std::string _help_info =
         "usage: hsindb <command> [<args>]"
         "\nThese are common commands used in various situations:"
         "\n  build                build the data index for the given RDF data file path:"
-        "\n    -n,--name NAME       specify the database name"
+        "\n    -db,--database DATABASE       specify the database name"
         "\n    -f,--file FILE       specify the RDF data file path"
         "\n"
         "\n  query                query the SPARQL statement for the given file path:"
-        "\n    -n,--name NAME       specify the database name"
+        "\n    -db,--database DATABASE       specify the database name"
         "\n    -f,--file FILE       specify the SPARQL statement file path"
         //                                   "\n"
         //                                   "\n  serve                start the HTTP serve for the hsinDB:"
-        //                                   "\n    -n,--name NAME       specify the database name"
+        //                                   "\n    -db,--database DATABASE       specify the database name"
         //                                   "\n    -p,--port PORT       specify the HTTP server port"
         "\n"
         "\npositional arguments:"
@@ -111,6 +111,7 @@ class ArgsParser {
             args.emplace(argv[i], argv[i + 1]);
         }
 
+        // 执行对应的命令的解析器
         (this->*_selector[argv1])(args);
         return _position[argv1];
     }
@@ -119,37 +120,36 @@ class ArgsParser {
 
    private:
     const std::string _build_info =
-        "usage: hsindb build [-n NAME] [-f FILE]"
+        "usage: hsindb build [-db DATABASE] [-f FILE]"
         "\nbuild the data index for the given RDF data file path"
         "\n"
-        "\n  -n,--name NAME       specify the database name"
-        "\n  -f,--file FILE       specify the RDF data file path"
+        "\n  -db,--database DATABASE       specify the database name"
+        "\n  -f,--file FILE                specify the RDF data file path"
         "\n"
         "\noptional arguments"
-        "\n  -h,--help            show this help message and exit"
+        "\n  -h,--help                     show this help message and exit"
         "\n";
 
     const std::string _query_info =
-        "usage: hsindb query [-n NAME] [-f FILE]"
+        "usage: hsindb query [-db DATABASE] [-f FILE]"
         "\nquery the SPARQL statement for the given file path"
         "\n"
-        "\n  -n,--name NAME       specify the database name"
-        "\n  -f,--file FILE       specify the SPARQL statement file path"
+        "\n  -db,--database DATABASE       specify the database name"
+        "\n  -f,--file FILE                specify the SPARQL statement file path"
         "\n"
         "\noptional arguments"
-        "\n  -h,--help            show this help message and exit"
-        "\n  -t                   specify the number of threads you need to use"
+        "\n  -h,--help                     show this help message and exit"
+        "\n  -t                            specify the number of threads you need to use"
         "\n";
 
     const std::string _serve_info =
-        "usage: hsindb serve [-n db_name] [-p port]"
+        "usage: hsindb serve [-db DATABASE] [-p port]"
         "\nstart the HTTP serve for hsinDB"
         "\n"
-        "\n  -n,--name NAME       specify the database name"
-        "\n  -p,--port PORT       specify the HTTP server port"
+        "\n  -p,--port PORT                specify the HTTP server port"
         "\n"
         "\noptional arguments"
-        "\n  -h,--help            show this help message and exit"
+        "\n  -h,--help                     show this help message and exit"
         "\n";
 
    private:
@@ -158,13 +158,14 @@ class ArgsParser {
             std::cout << _build_info << std::endl;
             exit(1);
         }
-        if ((!args.count("-n") && !args.count("--name")) || (!args.count("-f") && !args.count("--file"))) {
-            std::cerr << "usage: hsindb build [-n NAME] [-f FILE]" << std::endl;
-            std::cerr << "hsinDb: error: the following arguments are required: [-n NAME] [-f FILE]"
+        if ((!args.count("-db") && !args.count("--database")) ||
+            (!args.count("-f") && !args.count("--file"))) {
+            std::cerr << "usage: hsindb build [-db DATABASE] [-f FILE]" << std::endl;
+            std::cerr << "hsinDb: error: the following arguments are required: [-db DATABASE] [-f FILE]"
                       << std::endl;
             exit(1);
         }
-        _arguments[_arg_name] = args.count("-n") ? args.at("-n") : args.at("--name");
+        _arguments[_arg_name] = args.count("-db") ? args.at("-db") : args.at("--database");
         _arguments[_arg_file] = args.count("-f") ? args.at("-f") : args.at("--file");
     }
 
@@ -173,12 +174,12 @@ class ArgsParser {
             std::cout << _query_info << std::endl;
             exit(1);
         }
-        if (!args.count("-n") && !args.count("--name")) {
-            std::cerr << "usage: hsindb query [-n NAME]" << std::endl;
-            std::cerr << "hsinDb: error: the following argument is required: [-n NAME]" << std::endl;
+        if (!args.count("-db") && !args.count("--database")) {
+            std::cerr << "usage: hsindb query [-db DATABASE]" << std::endl;
+            std::cerr << "hsinDb: error: the following argument is required: [-db DATABASE]" << std::endl;
             exit(1);
         }
-        _arguments[_arg_name] = args.count("-n") ? args.at("-n") : args.at("--name");
+        _arguments[_arg_name] = args.count("-db") ? args.at("-db") : args.at("--database");
         if (args.count("-f"))
             _arguments[_arg_file] = args.at("-f");
         else if (args.count("--file"))
@@ -193,18 +194,16 @@ class ArgsParser {
             _arguments[_arg_thread_num] = std::to_string(default_thread_num);
     }
 
-    void serve(const std::unordered_map<std::string, std::string>& args) {
+    void server(const std::unordered_map<std::string, std::string>& args) {
         if (args.empty() || args.count("-h") || args.count("--help")) {
             std::cout << _serve_info << std::endl;
             exit(1);
         }
-        if ((!args.count("-n") && !args.count("--name")) || (!args.count("-p") && !args.count("--port"))) {
-            std::cerr << "usage: hsindb serve [-n NAME] [-p PORT]" << std::endl;
-            std::cerr << "hsinDb: error: the following arguments are required: [-n NAME] [-p PORT]"
-                      << std::endl;
+        if (!args.count("-p") && !args.count("--port")) {
+            std::cerr << "usage: hsindb serve [-p PORT]" << std::endl;
+            std::cerr << "hsinDb: error: the following arguments are required: [-p PORT]" << std::endl;
             exit(1);
         }
-        _arguments[_arg_name] = args.count("-n") ? args.at("-n") : args.at("--name");
         _arguments[_arg_port] = args.count("-p") ? args.at("-p") : args.at("--port");
         if (!isNumber(_arguments[_arg_port])) {
             std::cerr << "hsinDb: error: the argument [-p PORT] requires a number, but got "

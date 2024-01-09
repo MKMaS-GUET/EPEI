@@ -6,8 +6,8 @@
  * @Description:
  */
 
-#ifndef COMPRESSED_ENCODED_TREE_INDEX_QUERY_EXECUTOR_HPP
-#define COMPRESSED_ENCODED_TREE_INDEX_QUERY_EXECUTOR_HPP
+#ifndef QUERY_EXECUTOR_HPP
+#define QUERY_EXECUTOR_HPP
 
 #include <chrono>
 #include <cmath>

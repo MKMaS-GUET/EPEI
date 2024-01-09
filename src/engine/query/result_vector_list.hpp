@@ -3,8 +3,8 @@
 #include <utility>
 #include <vector>
 
-#ifndef RESULTlt_VECTOR_LIST_HPP
-#define RESULTlt_VECTOR_LIST_HPP
+#ifndef RESULT_VECTOR_LIST_HPP
+#define RESULT_VECTOR_LIST_HPP
 
 struct Result_Vector {
     int id = -1;
@@ -41,7 +41,6 @@ class Result_Vector_List {
     }
 
     std::shared_ptr<Result_Vector> shortest() {
-
         long unsigned int min_i = 0;
         long unsigned int min = result_vectors[0]->result.size();
         for (long unsigned int i = 0; i < result_vectors.size(); i++) {

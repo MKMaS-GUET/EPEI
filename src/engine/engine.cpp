@@ -20,4 +20,9 @@ void Engine::Query(const std::string& db_name, const std::string& data_file) {
     impl->query(db_name, data_file);
 }
 
+void Engine::Server(const std::string& port) {
+    auto impl = std::make_shared<Engine::Impl>();
+    impl->server(port);
+}
+
 }  // namespace hsinDB
