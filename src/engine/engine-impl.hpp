@@ -86,19 +86,13 @@ class hsinDB::Engine::Impl {
         std::ifstream in(sparql_file, std::ifstream::in);
         if (in.is_open()) {
             std::string line;
-            while (std::getline(in, line)) {
-                if (line == "------------------------------------------------------------------") {
-                    sparqls.push_back(sparql);
-                    sparql = "";
-                } else {
-                    if (line.size() > 0)
-                        sparql += line + "\n";
-                }
+            while (std::getline(in, sparql)) {
+                sparqls.push_back(sparql);
             }
             in.close();
         }
         sparqls.push_back(sparql);
-
+        
         return sparqls;
     }
 
