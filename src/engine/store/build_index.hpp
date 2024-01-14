@@ -1,3 +1,6 @@
+#ifndef BUILD_INDEX_HPP
+#define BUILD_INDEX_HPP
+
 #include <fcntl.h>
 #include <malloc.h>
 #include <parallel_hashmap/btree.h>
@@ -12,10 +15,6 @@
 #include <thread>
 #include <vector>
 #include "virtual_memory.hpp"
-
-
-#ifndef BUILD_INDEX_HPP
-#define BUILD_INDEX_HPP
 
 
 #define MAX_SIZE 20000
@@ -555,7 +554,7 @@ class IndexBuilder {
                 }
             }
 
-            usleep(10000);
+            usleep(5000);
         }
 
         so_predicate_array_vm.close_vm();

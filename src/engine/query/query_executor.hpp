@@ -383,7 +383,8 @@ class QueryExecutor {
                 // std::cout << join_case << std::endl;
                 std::shared_ptr<Result_Vector> range = Result_Vector_list.shortest();
                 for (auto it = range->result.begin(); it != range->result.end(); it++) {
-                    stat.candidate_result[stat.level]->push_back(*it);
+                    stat.candidate_result[stat.level]->emplace_back(std::move(*it));
+                    // stat.candidate_result[stat.level]->push_back(*it);
                 }
             }
         }

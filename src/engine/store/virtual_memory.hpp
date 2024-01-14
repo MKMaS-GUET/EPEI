@@ -1,10 +1,11 @@
+#ifndef VIRTUAL_MEMORY_HPP
+#define VIRTUAL_MEMORY_HPP
+
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <string>
 
-#ifndef VIRTUAL_MEMORY_HPP
-#define VIRTUAL_MEMORY_HPP
 
 class Virtual_Memory {
     uint* _vm;

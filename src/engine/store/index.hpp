@@ -1,3 +1,7 @@
+#ifndef INDEX_HPP
+#define INDEX_HPP
+
+#include <malloc.h>
 #include <parallel_hashmap/phmap.h>
 #include <fstream>
 #include <future>
@@ -5,9 +9,6 @@
 #include <vector>
 #include "../query/result_vector_list.hpp"
 #include "virtual_memory.hpp"
-
-#ifndef INDEX_HPP
-#define INDEX_HPP
 
 class Index {
     std::string _db_data_path;
@@ -31,8 +32,8 @@ class Index {
     Virtual_Memory _so_predicate_array;
     Virtual_Memory _arrays;
 
-    // std::vector<std::shared_ptr<Result_Vector>> ps_sets;
-    // std::vector<std::shared_ptr<Result_Vector>> po_sets;
+    std::vector<std::shared_ptr<Result_Vector>> ps_sets;
+    std::vector<std::shared_ptr<Result_Vector>> po_sets;
 
     void load_db_info() {
         Virtual_Memory vm = Virtual_Memory(_db_data_path + "DB_INFO", 9 * 4);
@@ -57,47 +58,6 @@ class Index {
         vm.close_vm();
     }
 
-    void load_entity() {
-        auto beg = std::chrono::high_resolution_clock::now();
-
-        // for (int i = 0; i < 4; i++)
-        //     entity2id[i] = phmap::flat_hash_map<std::string, uint>();
-
-        entity2id = std::vector<phmap::flat_hash_map<std::string, uint>>(4);
-
-        std::vector<std::future<bool>> sub_build_task_list;
-        for (int t = 0; t < 4; t++) {
-            sub_build_task_list.emplace_back(
-                std::async(std::launch::async, &Index::sub_build_entity2id, this, t));
-        }
-        sub_build_task_list.emplace_back(
-            std::async(std::launch::async, &Index::sub_build_id2entity, this, _entity_cnt));
-
-        for (std::future<bool>& task : sub_build_task_list) {
-            task.get();
-        }
-
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> diff = end - beg;
-        std::cout << "takes " << diff.count() << " ms." << std::endl;
-    }
-
-    bool sub_build_entity2id(int part) {
-        std::ifstream entity_in(_db_data_path + "ENTITY/" + std::to_string(part),
-                                std::ofstream::out | std::ofstream::binary);
-        std::string entity;
-        uint id = part;
-        if (part == 0)
-            id = 4;
-        while (std::getline(entity_in, entity)) {
-            entity2id[part][entity] = id;
-            id += 4;
-        }
-
-        entity_in.close();
-        return true;
-    };
-
     bool sub_build_id2entity(uint entity_cnt) {
         std::ifstream entity_ins[4];
         for (int i = 0; i < 4; i++) {
@@ -119,7 +79,7 @@ class Index {
         return true;
     };
 
-    void load_predicate() {
+    bool load_predicate() {
         std::ifstream predicate_in(_db_data_path + "PREDICATE", std::ofstream::out | std::ofstream::binary);
         std::string predicate;
         uint id = 1;
@@ -130,11 +90,60 @@ class Index {
             id++;
         }
         predicate_in.close();
+        return true;
+    }
+
+    bool pre_load_tree() {
+        uint offset;
+        uint size;
+        std::shared_ptr<Result_Vector> rv;
+        for (uint pid = 1; pid <= _predicate_cnt; pid++) {
+            offset = _btree_pos[(pid - 1) * 4];
+            size = _btree_pos[(pid - 1) * 4 + 1];
+            rv = std::make_shared<Result_Vector>(size);
+            for (uint i = 0; i < size; i++) {
+                rv->result[i] = _btrees[offset + i];
+            }
+            ps_sets.push_back(rv);
+
+            offset = _btree_pos[(pid - 1) * 4 + 2];
+            size = _btree_pos[(pid - 1) * 4 + 3];
+            rv = std::make_shared<Result_Vector>(size);
+            for (uint i = 0; i < size; i++) {
+                rv->result[i] = _btrees[offset + i];
+            }
+            po_sets.push_back(rv);
+        }
+        return true;
+    }
+
+    bool sub_load_entity(int part, bool* get_all_id, phmap::flat_hash_set<std::string>* entities) {
+        std::ifstream entity_in(_db_data_path + "ENTITY/" + std::to_string(part),
+                                std::ofstream::out | std::ofstream::binary);
+        std::string entity;
+        uint id = part;
+        if (part == 0)
+            id = 4;
+        while (std::getline(entity_in, entity)) {
+            id2entity[id] = entity;
+            if (!(*get_all_id)) {
+                auto it = entities->find(entity);
+                if (it != entities->end()) {
+                    entity2id[entity] = id;
+                    *get_all_id = entities->size() == entity2id.size();
+                }
+            }
+            id += 4;
+        }
+
+        entity_in.close();
+        return true;
     }
 
    public:
     std::vector<std::string> id2entity;
-    std::vector<phmap::flat_hash_map<std::string, uint>> entity2id;
+    // std::vector<phmap::flat_hash_map<std::string, uint>> entity2id;
+    phmap::flat_hash_map<std::string, uint> entity2id;
     std::vector<std::string> id2predicate;
     phmap::flat_hash_map<std::string, uint> predicate2id;
 
@@ -144,9 +153,32 @@ class Index {
         _db_data_path = "./DB_DATA_ARCHIVE/" + _db_name + "/";
         load_db_info();
         init_vm();
-        load_predicate();
-        load_entity();
-        // pre_load_tree();
+    }
+
+    void load_data(phmap::flat_hash_set<std::string>& entities) {
+        auto beg = std::chrono::high_resolution_clock::now();
+
+        id2entity.reserve(_entity_cnt + 1);
+        id2entity.push_back("");
+
+        std::vector<std::future<bool>> sub_task_list;
+
+        bool get_all_id = entities.size() == entity2id.size();
+
+        for (int t = 0; t < 4; t++) {
+            sub_task_list.emplace_back(
+                std::async(std::launch::async, &Index::sub_load_entity, this, t, &get_all_id, &entities));
+        }
+        sub_task_list.emplace_back(std::async(std::launch::async, &Index::pre_load_tree, this));
+        sub_task_list.emplace_back(std::async(std::launch::async, &Index::load_predicate, this));
+
+        for (std::future<bool>& task : sub_task_list) {
+            task.get();
+        }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> diff = end - beg;
+        std::cout << "load entity takes " << diff.count() << " ms." << std::endl;
     }
 
     void init_vm() {
@@ -173,18 +205,18 @@ class Index {
     ~Index() {
         close_vm();
 
-        id2entity.clear();
-        entity2id.clear();
-        id2predicate.clear();
-        predicate2id.clear();
+        std::vector<std::string>().swap(id2entity);
+        phmap::flat_hash_map<std::string, uint>().swap(entity2id);
+        std::vector<std::string>().swap(id2predicate);
+        phmap::flat_hash_map<std::string, uint>().swap(predicate2id);
+
+        malloc_trim(0);
     };
 
     uint get_entity_id(std::string entity) {
-        for (int part = 0; part < 4; part++) {
-            auto it = entity2id[part].find(entity);
-            if (it != entity2id[part].end()) {
-                return it->second;
-            }
+        auto it = entity2id.find(entity);
+        if (it != entity2id.end()) {
+            return it->second;
         }
         return 0;
     }
@@ -195,54 +227,31 @@ class Index {
 
     uint get_predicate_cnt() { return _predicate_cnt; }
 
-    // void pre_load_tree() {
-    //     uint offset;
-    //     uint size;
-    //     std::shared_ptr<Result_Vector> rv;
-    //     for (uint pid = 1; pid <= _predicate_cnt; pid++) {
-    //         offset = _btree_pos[(pid - 1) * 4];
-    //         size = _btree_pos[(pid - 1) * 4 + 1];
-    //         rv = std::make_shared<Result_Vector>(size);
-    //         for (uint i = 0; i < size; i++) {
-    //             rv->result[i] = _btrees[offset + i];
-    //         }
-    //         ps_sets.push_back(rv);
-
-    //         offset = _btree_pos[(pid - 1) * 4 + 2];
-    //         size = _btree_pos[(pid - 1) * 4 + 3];
-    //         rv = std::make_shared<Result_Vector>(size);
-    //         for (uint i = 0; i < size; i++) {
-    //             rv->result[i] = _btrees[offset + i];
-    //         }
-    //         po_sets.push_back(rv);
-    //     }
-    // }
-
     std::shared_ptr<Result_Vector> get_search_range_from_ps_tree(uint pid) {
-        uint offset = _btree_pos[(pid - 1) * 4];
-        uint size = _btree_pos[(pid - 1) * 4 + 1];
+        // uint offset = _btree_pos[(pid - 1) * 4];
+        // uint size = _btree_pos[(pid - 1) * 4 + 1];
 
-        std::shared_ptr<Result_Vector> rv = std::make_shared<Result_Vector>(size);
+        // std::shared_ptr<Result_Vector> rv = std::make_shared<Result_Vector>(size);
 
-        for (uint i = 0; i < size; i++) {
-            rv->result[i] = _btrees[offset + i];
-        }
-        return rv;
-        // return ps_sets[pid - 1];
+        // for (uint i = 0; i < size; i++) {
+        //     rv->result[i] = _btrees[offset + i];
+        // }
+        // return rv;
+        return ps_sets[pid - 1];
     }
 
     std::shared_ptr<Result_Vector> get_search_range_from_po_tree(uint pid) {
-        uint offset = _btree_pos[(pid - 1) * 4 + 2];
-        uint size = _btree_pos[(pid - 1) * 4 + 3];
+        // uint offset = _btree_pos[(pid - 1) * 4 + 2];
+        // uint size = _btree_pos[(pid - 1) * 4 + 3];
 
-        std::shared_ptr<Result_Vector> rv = std::make_shared<Result_Vector>(size);
+        // std::shared_ptr<Result_Vector> rv = std::make_shared<Result_Vector>(size);
 
-        for (uint i = 0; i < size; i++) {
-            rv->result[i] = _btrees[offset + i];
-        }
+        // for (uint i = 0; i < size; i++) {
+        //     rv->result[i] = _btrees[offset + i];
+        // }
 
-        return rv;
-        // return po_sets[pid - 1];
+        // return rv;
+        return po_sets[pid - 1];
     }
 
     uint ps_size(uint pid) { return _btree_pos[(pid - 1) * 4 + 1]; }

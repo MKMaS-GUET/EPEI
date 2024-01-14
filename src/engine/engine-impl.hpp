@@ -18,9 +18,10 @@
 #include "parser/sparql_parser.hpp"
 #include "query/query_executor.hpp"
 #include "query/query_plan.hpp"
+#include "query/query_result.hpp"
+#include "server/server.hpp"
 #include "store/build_index.hpp"
 #include "store/index.hpp"
-#include "server/server.hpp"
 
 class hsinDB::Engine::Impl {
    public:
@@ -39,23 +40,38 @@ class hsinDB::Engine::Impl {
     }
 
     void query(const std::string& db_name, const std::string& sparql_file) {
-        std::shared_ptr<Index> index = std::make_shared<Index>(db_name);
-
         // parse SPARQL statement
-        std::vector<std::string> sparqls = read_sparql_file(sparql_file);
+
+        std::vector<std::string> sparqls;
+        std::string sparql = "";
+        phmap::flat_hash_set<std::string> entities;
+        std::ifstream in(sparql_file, std::ifstream::in);
+        if (in.is_open()) {
+            std::string line;
+            while (std::getline(in, sparql)) {
+                get_entity(entities, sparql);
+                sparqls.push_back(sparql);
+            }
+            in.close();
+        }
+
+        std::shared_ptr<Index> index = std::make_shared<Index>(db_name);
+        index->load_data(entities);
 
         for (long unsigned int i = 0; i < sparqls.size(); i++) {
             std::string sparql = sparqls[i];
 
             printf("%ld ------------------------------------------------------------------\n", i + 1);
 
+            auto start = std::chrono::high_resolution_clock::now();
+
             auto parser = std::make_shared<SPARQLParser>(sparql);
             auto triple_list = parser->triple_list();
 
-            auto start = std::chrono::high_resolution_clock::now();
-
             // generate query plan
             auto query_plan = std::make_shared<QueryPlan>(index, triple_list, parser->limit());
+
+            auto plan_end = std::chrono::high_resolution_clock::now();
 
             // execute query
             auto executor = std::make_shared<QueryExecutor>(index, query_plan);
@@ -63,85 +79,62 @@ class hsinDB::Engine::Impl {
             executor->query();
 
             auto mapping_start = std::chrono::high_resolution_clock::now();
-            int cnt = project_result(executor->result(), index, query_plan, parser);
+            int cnt = query_result(executor->result(), index, query_plan, parser);
             auto mapping_finish = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> mapping_diff = mapping_finish - mapping_start;
 
             auto finish = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> diff = finish - start;
 
+            std::chrono::duration<double, std::milli> plan_time = plan_end - start;
+
             // printf("%s", sparql.c_str());
             printf("%d result(s).\n", cnt);
+            printf("generate plan takes %lf ms.\n", plan_time.count());
             printf("execute takes %lf ms.\n", executor->duration());
-            printf("mapping_result takes %lf ms.\n", mapping_diff.count());
+            printf("output result takes %lf ms.\n", mapping_diff.count());
 
             printf("query time cost %lf ms.\n", diff.count());
+
+            malloc_trim(0);
         }
+        exit(0);
     }
 
-    void server(const std::string& port) {
-        start_server(port);
-    }
+    void server(const std::string& port) { start_server(port); }
 
    private:
-    std::vector<std::string> read_sparql_file(const std::string& sparql_file) {
-        std::vector<std::string> sparqls;
-        std::string sparql = "";
+    void get_entity(phmap::flat_hash_set<std::string>& entities, std::string sparql) {
+        std::regex pattern(R"(\{([^{}]*)\})");
+        std::regex triplet_Pattern(
+            R"(((\?.*?\s+)|(<.*?>)\s+)((\?.*?\s+)|(<.*?>)\s+)((\?.*?\s+)|(<.*?>)\s+)\.)");
 
-        std::ifstream in(sparql_file, std::ifstream::in);
-        if (in.is_open()) {
-            std::string line;
-            while (std::getline(in, sparql)) {
-                sparqls.push_back(sparql);
-            }
-            in.close();
-        }
-        sparqls.push_back(sparql);
+        std::smatch match;
+        if (std::regex_search(sparql, match, pattern)) {
+            std::string triplets_str = match[1].str();
 
-        return sparqls;
-    }
+            std::sregex_iterator triplet_iter(triplets_str.begin(), triplets_str.end(), triplet_Pattern);
+            std::sregex_iterator end;
 
-    int project_result(std::vector<std::vector<uint>>& result,
-                       const std::shared_ptr<Index>& index,
-                       const std::shared_ptr<QueryPlan>& query_plan,
-                       const std::shared_ptr<SPARQLParser>& parser) {
-        auto last = result.end();
-        const auto& modifier = parser->project_modifier();
-        // 获取每一个变量的id（优先级顺序）
-        const auto variable_indexes = query_plan->mapping_variable2idx(parser->project_variables());
+            while (triplet_iter != end) {
+                std::smatch triplet = *triplet_iter;
 
-        int cnt = 0;
-        if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {
-            last = std::unique(result.begin(), result.end(),
-                               // 判断两个列表 a 和 b 是否相同，
-                               [&](const std::vector<uint>& a, const std::vector<uint>& b) {
-                                   // std::all_of 可以用来判断数组中的值是否都满足一个条件
-                                   return std::all_of(variable_indexes.begin(), variable_indexes.end(),
-                                                      // 判断依据是，列表中的每一个元素都相同
-                                                      [&](size_t i) { return a[i] == b[i]; });
-                               });
-            for (auto it = result.begin(); it != last; ++it) {
-                const auto& item = *it;
-                for (const auto& idx : variable_indexes) {
-                    // index->id2entity[item[idx]].c_str();
-                    printf("%s ", index->id2entity[item[idx]].c_str());
+                std::istringstream iss(triplet[0]);
+                std::string part1, part2, part3;
+                iss >> part1 >> part2 >> part3;
+
+                if (part1[0] == '<' && part1.back() == '>') {
+                    entities.insert(part1);
                 }
-                cnt++;
-                printf("\n");
-            }
-        } else {
-            cnt = result.size();
-            for (auto it = result.begin(); it != last; ++it) {
-                const auto& item = *it;
-                for (const auto& idx : variable_indexes) {
-                    // index->id2entity[item[idx]].c_str();
-                    printf("%s ", index->id2entity[item[idx]].c_str());
+                if (part3[0] == '<' && part3.back() == '>') {
+                    entities.insert(part3);
                 }
-                printf("\n");
+
+                ++triplet_iter;
             }
         }
 
-        return cnt;
+        return;
     }
 };
 

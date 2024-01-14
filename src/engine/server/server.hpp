@@ -20,6 +20,7 @@
 #include "../parser/sparql_parser.hpp"
 #include "../query/query_executor.hpp"
 #include "../query/query_plan.hpp"
+#include "../query/query_result.hpp"
 #include "../store//build_index.hpp"
 #include "../store/index.hpp"
 
@@ -44,7 +45,7 @@ std::vector<std::string> list_db() {
     return rdf_db_list;
 }
 
-std::vector<std::unordered_map<std::string, std::string>> execute_query(std::string& sparql) {
+std::vector<std::vector<std::string>> execute_query(std::string& sparql) {
     if (db_index == 0) {
         std::cout << "database doesn't be loaded correctly." << std::endl;
         return {};
@@ -52,38 +53,26 @@ std::vector<std::unordered_map<std::string, std::string>> execute_query(std::str
 
     auto parser = std::make_shared<SPARQLParser>(sparql);
 
-    auto triple_list = parser->triple_list();
-
     // generate query plan
-    auto query_plan = std::make_shared<QueryPlan>(db_index, triple_list, parser->limit());
+    auto query_plan = std::make_shared<QueryPlan>(db_index, parser->triple_list(), parser->limit());
 
     // execute query
     auto executor = std::make_shared<QueryExecutor>(db_index, query_plan);
 
     executor->query();
 
-    auto result = executor->result();
-    if (result.empty()) {
+    std::vector<std::vector<uint>> results_id = executor->result();
+    if (results_id.empty()) {
         return {};
     }
 
-    std::vector<std::unordered_map<std::string, std::string>> ret;
+    auto variables = parser->project_variables();
 
-    // auto variables = parser.getQueryVariables();
-    // ret.reserve(variables.size());
+    std::vector<std::vector<std::string>> results;
 
-    // for (const auto& row : result) {
-    //     std::unordered_map<std::string, std::string> item;
-    //     for (size_t i = 0; i < variables.size(); ++i) {
-    //         std::string var = variables[i].substr(1);  // exclude the first symbol '?'
-    //         std::string entity = row[i].substr(1);     // exclude the first symbol '"'
-    //         entity.pop_back();                         // remove the last symbol '"'
-    //         item.emplace(var, entity);
-    //     }
-    //     ret.emplace_back(std::move(item));
-    // }
+    query_result(results_id, results, db_index, query_plan, parser);
 
-    return ret;
+    return results;
 }
 
 void list(const httplib::Request& req, httplib::Response& res) {
@@ -111,13 +100,16 @@ void info(const httplib::Request& req, httplib::Response& res) {
 void query(const httplib::Request& req, httplib::Response& res) {
     res.set_header("Access-Control-Allow-Origin", "*");
     std::cout << "Catch query request from http://" << req.remote_addr << ":" << req.remote_port << std::endl;
-    if (!req.has_param("sparql")) {
+
+    nlohmann::json body = nlohmann::json::parse(req.body);
+
+    if (!body.contains("sparql")) {
         return;
     }
-    std::string sparql = req.get_param_value("sparql");
-    nlohmann::json json;
-    json["data"] = execute_query(sparql);
-    res.set_content(json.dump(2), "text/plain;charset=utf-8");
+    std::string sparql = body["sparql"];
+    nlohmann::json response;
+    response["data"] = execute_query(sparql);
+    res.set_content(response.dump(2), "text/plain;charset=utf-8");
 }
 
 void create(const httplib::Request& req, httplib::Response& res) {
@@ -125,22 +117,24 @@ void create(const httplib::Request& req, httplib::Response& res) {
     std::cout << "Catch create request from http://" << req.remote_addr << ":" << req.remote_port
               << std::endl;
 
-    nlohmann::json j;
-    if (!req.has_param("rdf")) {
-        j["code"] = 5;
-        j["message"] = "Didn't specify a rdf name";
-        res.set_content(j.dump(2), "text/plain;charset=utf-8");
+    nlohmann::json body = nlohmann::json::parse(req.body);
+
+    nlohmann::json response;
+    if (!body.contains("rdf")) {
+        response["code"] = 5;
+        response["message"] = "Didn't specify a rdf name";
+        res.set_content(response.dump(2), "text/plain;charset=utf-8");
         return;
     }
-    if (!req.has_param("file_name")) {
-        j["code"] = 6;
-        j["message"] = "Didn't specify a data file name";
-        res.set_content(j.dump(2), "text/plain;charset=utf-8");
+    if (!body.contains("file_name")) {
+        response["code"] = 6;
+        response["message"] = "Didn't specify a data file name";
+        res.set_content(response.dump(2), "text/plain;charset=utf-8");
         return;
     }
 
-    std::string rdf = req.get_param_value("rdf");
-    std::string file_name = req.get_param_value("file_name");
+    std::string rdf = body["rdf"];
+    std::string file_name = body["file_name"];
     std::cout << "rdf: " << rdf << ", file_name: " << file_name << std::endl;
     IndexBuilder builder(db_name, file_name);
     if (!builder.build()) {
@@ -149,10 +143,10 @@ void create(const httplib::Request& req, httplib::Response& res) {
     }
     db_name = rdf;
 
-    j["code"] = 1;
-    j["message"] = "Create " + rdf + " successfully!";
+    response["code"] = 1;
+    response["message"] = "Create " + rdf + " successfully!";
     std::cout << "rdf have been changed into <" << rdf << ">." << std::endl;
-    res.set_content(j.dump(2), "text/plain;charset=utf-8");
+    res.set_content(response.dump(2), "text/plain;charset=utf-8");
 }
 
 void load_db(const httplib::Request& req, httplib::Response& res) {
@@ -160,33 +154,32 @@ void load_db(const httplib::Request& req, httplib::Response& res) {
     std::cout << "Catch switch request from http://" << req.remote_addr << ":" << req.remote_port
               << std::endl;
 
-    nlohmann::json j;
-    if (!req.has_param("db_name")) {
-        j["code"] = 2;
-        j["message"] = "Didn't specify a RDF name";
-        res.set_content(j.dump(2), "text/plain;charset=utf-8");
+    nlohmann::json body = nlohmann::json::parse(req.body);
+
+    nlohmann::json response;
+    if (!body.contains("db_name")) {
+        response["code"] = 2;
+        response["message"] = "Didn't specify a RDF name";
+        res.set_content(response.dump(2), "text/plain;charset=utf-8");
         return;
     }
 
-    std::string new_db_name = req.get_param_value("db_name");
+    std::string new_db_name = body["db_name"];
     if (new_db_name == db_name) {
-        j["code"] = 3;
-        j["message"] = "Same RDF, no need to switch";
-        res.set_content(j.dump(2), "text/plain;charset=utf-8");
+        response["code"] = 3;
+        response["message"] = "Same RDF, no need to switch";
+        res.set_content(response.dump(2), "text/plain;charset=utf-8");
         return;
-    }
-
-    if (db_index != 0) {
-        db_index->~Index();
     }
 
     db_index = std::make_shared<Index>(new_db_name);
+    std::cout << new_db_name << std::endl;
     db_name = new_db_name;
 
-    j["code"] = 1;
-    j["message"] = "RDF have been switched to " + new_db_name;
+    response["code"] = 1;
+    response["message"] = "RDF have been switched to " + new_db_name;
     std::cout << "RDF have been switched into <" << new_db_name << ">." << std::endl;
-    res.set_content(j.dump(2), "text/plain;charset=utf-8");
+    res.set_content(response.dump(2), "text/plain;charset=utf-8");
 }
 
 void upload(const httplib::Request& req, httplib::Response& res) {
