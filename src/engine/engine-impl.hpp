@@ -39,23 +39,6 @@ class hsinDB::Engine::Impl {
         std::cout << "Creating " << db_name << " takes " << diff.count() << " ms." << std::endl;
     }
 
-    void list_db() {
-        std::cout << ">select a database:" << std::endl;
-
-        std::filesystem::path path("./DB_DATA_ARCHIVE");
-        if (!std::filesystem::exists(path)) {
-            return;
-        }
-
-        std::filesystem::directory_iterator end_iter;
-        for (std::filesystem::directory_iterator iter(path); iter != end_iter; ++iter) {
-            if (std::filesystem::is_directory(iter->status())) {
-                std::string dir_name = iter->path().filename().string();
-                std::cout << "   " << dir_name << std::endl;
-            }
-        }
-    }
-
     void execute_sparql(std::vector<std::string> sparqls,
                         std::shared_ptr<Index> index,
                         std::string file_name) {
@@ -213,38 +196,48 @@ class hsinDB::Engine::Impl {
     void server(const std::string& port) { start_server(port); }
 
    private:
-    void get_entity(phmap::flat_hash_set<std::string>& entities, std::string sparql) {
-        std::regex pattern(R"(\{([^{}]*)\})");
-        std::regex triplet_Pattern(
-            R"(((\?.*?\s+)|(<.*?>)\s+)((\?.*?\s+)|(<.*?>)\s+)((\?.*?\s+)|(<.*?>)\s+)\.)");
+    void list_db() {
+        std::cout << ">select a database:" << std::endl;
 
-        std::smatch match;
-        if (std::regex_search(sparql, match, pattern)) {
-            std::string triplets_str = match[1].str();
-
-            std::sregex_iterator triplet_iter(triplets_str.begin(), triplets_str.end(), triplet_Pattern);
-            std::sregex_iterator end;
-
-            while (triplet_iter != end) {
-                std::smatch triplet = *triplet_iter;
-
-                std::istringstream iss(triplet[0]);
-                std::string part1, part2, part3;
-                iss >> part1 >> part2 >> part3;
-
-                if (part1[0] == '<' && part1.back() == '>') {
-                    entities.insert(part1);
-                }
-                if (part3[0] == '<' && part3.back() == '>') {
-                    entities.insert(part3);
-                }
-
-                ++triplet_iter;
-            }
+        std::filesystem::path path("./DB_DATA_ARCHIVE");
+        if (!std::filesystem::exists(path)) {
+            return;
         }
 
-        return;
+        std::filesystem::directory_iterator end_iter;
+        for (std::filesystem::directory_iterator iter(path); iter != end_iter; ++iter) {
+            if (std::filesystem::is_directory(iter->status())) {
+                std::string dir_name = iter->path().filename().string();
+                std::cout << "   " << dir_name << std::endl;
+            }
+        }
     }
+
+    // void get_entity(phmap::flat_hash_set<std::string>& entities, std::string sparql) {
+    //     std::regex pattern(R"(\{([^{}]*)\})");
+    //     std::regex triplet_Pattern(
+    //         R"(((\?.*?\s+)|(<.*?>)\s+)((\?.*?\s+)|(<.*?>)\s+)((\?.*?\s+)|(<.*?>)\s+)\.)");
+    //     std::smatch match;
+    //     if (std::regex_search(sparql, match, pattern)) {
+    //         std::string triplets_str = match[1].str();
+    //         std::sregex_iterator triplet_iter(triplets_str.begin(), triplets_str.end(), triplet_Pattern);
+    //         std::sregex_iterator end;
+    //         while (triplet_iter != end) {
+    //             std::smatch triplet = *triplet_iter;
+    //             std::istringstream iss(triplet[0]);
+    //             std::string part1, part2, part3;
+    //             iss >> part1 >> part2 >> part3;
+    //             if (part1[0] == '<' && part1.back() == '>') {
+    //                 entities.insert(part1);
+    //             }
+    //             if (part3[0] == '<' && part3.back() == '>') {
+    //                 entities.insert(part3);
+    //             }
+    //             ++triplet_iter;
+    //         }
+    //     }
+    //     return;
+    // }
 };
 
 #endif  // ENGINE_IMPL_HPP
