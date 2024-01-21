@@ -14,6 +14,8 @@ struct Result_Vector {
     Result_Vector() {}
 
     Result_Vector(uint size) { result = std::vector<uint>(size); }
+
+    ~Result_Vector() { std::vector<uint>().swap(result); }
 };
 
 class Result_Vector_List {

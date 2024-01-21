@@ -277,4 +277,4 @@ class SPARQLLexer {
     bool _is_token_finish;
 };
 
-#endif  // COMPRESSED_ENCODED_TREE_INDEX_SPARQL_LEXER_HPP
+#endif  // SPARQL_LEXER_HPP

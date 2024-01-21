@@ -39,29 +39,42 @@ class hsinDB::Engine::Impl {
         std::cout << "Creating " << db_name << " takes " << diff.count() << " ms." << std::endl;
     }
 
-    void query(const std::string& db_name, const std::string& sparql_file) {
-        // parse SPARQL statement
+    void list_db() {
+        std::cout << ">select a database:" << std::endl;
 
-        std::vector<std::string> sparqls;
-        std::string sparql = "";
-        phmap::flat_hash_set<std::string> entities;
-        std::ifstream in(sparql_file, std::ifstream::in);
-        if (in.is_open()) {
-            std::string line;
-            while (std::getline(in, sparql)) {
-                get_entity(entities, sparql);
-                sparqls.push_back(sparql);
-            }
-            in.close();
+        std::filesystem::path path("./DB_DATA_ARCHIVE");
+        if (!std::filesystem::exists(path)) {
+            return;
         }
 
-        std::shared_ptr<Index> index = std::make_shared<Index>(db_name);
-        index->load_data(entities);
+        std::filesystem::directory_iterator end_iter;
+        for (std::filesystem::directory_iterator iter(path); iter != end_iter; ++iter) {
+            if (std::filesystem::is_directory(iter->status())) {
+                std::string dir_name = iter->path().filename().string();
+                std::cout << "   " << dir_name << std::endl;
+            }
+        }
+    }
+
+    void execute_sparql(std::vector<std::string> sparqls,
+                        std::shared_ptr<Index> index,
+                        std::string file_name) {
+        // index->load_data(entities);
+        FILE* output_file = NULL;
+        if (file_name != "")
+            output_file = fopen(file_name.c_str(), "w");
 
         for (long unsigned int i = 0; i < sparqls.size(); i++) {
             std::string sparql = sparqls[i];
 
-            printf("%ld ------------------------------------------------------------------\n", i + 1);
+            if (sparqls.size() > 1) {
+                if (output_file == NULL)
+                    printf("%ld ------------------------------------------------------------------\n", i + 1);
+                else
+                    fprintf(output_file,
+                            "%ld ------------------------------------------------------------------\n",
+                            i + 1);
+            }
 
             auto start = std::chrono::high_resolution_clock::now();
 
@@ -79,7 +92,11 @@ class hsinDB::Engine::Impl {
             executor->query();
 
             auto mapping_start = std::chrono::high_resolution_clock::now();
-            int cnt = query_result(executor->result(), index, query_plan, parser);
+            int cnt = 0;
+            if (output_file == NULL)
+                cnt = query_result(executor->result(), index, query_plan, parser);
+            else
+                cnt = query_result(executor->result(), index, query_plan, parser, output_file);
             auto mapping_finish = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> mapping_diff = mapping_finish - mapping_start;
 
@@ -88,17 +105,109 @@ class hsinDB::Engine::Impl {
 
             std::chrono::duration<double, std::milli> plan_time = plan_end - start;
 
+            if (output_file == NULL) {
+                printf("%d result(s).\n", cnt);
+                printf("generate plan takes %lf ms.\n", plan_time.count());
+                printf("execute takes %lf ms.\n", executor->duration());
+                printf("output result takes %lf ms.\n", mapping_diff.count());
+
+                printf("query time cost %lf ms.\n", diff.count());
+            } else {
+                fprintf(output_file, "%d result(s).\n", cnt);
+                fprintf(output_file, "generate plan takes %lf ms.\n", plan_time.count());
+                fprintf(output_file, "execute takes %lf ms.\n", executor->duration());
+                fprintf(output_file, "output result takes %lf ms.\n", mapping_diff.count());
+
+                fprintf(output_file, "query time cost %lf ms.\n", diff.count());
+            }
+
             // printf("%s", sparql.c_str());
-            printf("%d result(s).\n", cnt);
-            printf("generate plan takes %lf ms.\n", plan_time.count());
-            printf("execute takes %lf ms.\n", executor->duration());
-            printf("output result takes %lf ms.\n", mapping_diff.count());
-
-            printf("query time cost %lf ms.\n", diff.count());
-
-            malloc_trim(0);
         }
-        exit(0);
+    }
+
+    void query(const std::string& name, const std::string& file) {
+        std::string cmd;
+        std::string db;
+        std::shared_ptr<Index> index;
+        while (true) {
+            list_db();
+            std::cout << ">";
+
+            std::cin >> cmd;
+            if (cmd == "select") {
+                std::cin >> db;
+                index = std::make_shared<Index>(db);
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+                while (true) {
+                    std::cout << ">";
+                    std::string sparql;
+                    std::string line;
+                    std::string word;
+                    std::getline(std::cin, line);
+                    std::istringstream iss(line);
+                    bool cmd_flag = true;
+                    while (iss >> word) {
+                        if (cmd_flag) {
+                            cmd = word;
+                            cmd_flag = false;
+                        } else {
+                            sparql += word + " ";
+                        }
+                    }
+
+                    if (sparql.size() > 1)
+                        sparql = sparql.substr(0, sparql.size() - 1);
+
+                    std::vector<std::string> sparqls;
+                    if (cmd == "sparql") {
+                        sparqls.push_back(sparql);
+                        execute_sparql(sparqls, index, "");
+                    }
+
+                    if (cmd == "file") {
+                        std::string rest_cmd = sparql;
+                        std::istringstream iss(sparql);
+                        std::string token;
+
+                        std::string input_file, output_file = "";
+                        while (iss >> token) {
+                            if (token == "-i") {
+                                iss >> input_file;
+                            } else if (token == "-o") {
+                                iss >> output_file;
+                            }
+                        }
+
+                        if (input_file != "") {
+                            std::ifstream in(input_file, std::ifstream::in);
+                            if (in.is_open()) {
+                                std::string line;
+                                while (std::getline(in, sparql)) {
+                                    sparqls.push_back(sparql);
+                                }
+                                in.close();
+                            }
+                            execute_sparql(sparqls, index, output_file);
+                        }
+                    }
+
+                    if (cmd == "change") {
+                        index->close();
+                        break;
+                    }
+
+                    if (cmd == "exit") {
+                        exit(0);
+                    }
+                }
+
+            } else if (cmd == "exit") {
+                exit(0);
+            }
+        }
+
+        // parse SPARQL statement
     }
 
     void server(const std::string& port) { start_server(port); }
@@ -138,4 +247,4 @@ class hsinDB::Engine::Impl {
     }
 };
 
-#endif  // COMPRESSED_ENCODED_TREE_INDEX_ENGINE_IMPL_HPP
+#endif  // ENGINE_IMPL_HPP

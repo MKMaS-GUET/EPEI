@@ -6,8 +6,8 @@
  * @Description:
  */
 
-#ifndef COMPRESSED_ENCODED_TREE_INDEX_ARGS_PARSER_HPP
-#define COMPRESSED_ENCODED_TREE_INDEX_ARGS_PARSER_HPP
+#ifndef ARGS_PARSER_HPP
+#define ARGS_PARSER_HPP
 
 #include <algorithm>
 #include <cstring>
@@ -170,28 +170,29 @@ class ArgsParser {
     }
 
     void query(const std::unordered_map<std::string, std::string>& args) {
-        if (args.empty() || args.count("-h") || args.count("--help")) {
+        if (args.count("-h") || args.count("--help")) {
             std::cout << _query_info << std::endl;
             exit(1);
         }
-        if (!args.count("-db") && !args.count("--database")) {
-            std::cerr << "usage: hsindb query [-db DATABASE]" << std::endl;
-            std::cerr << "hsinDb: error: the following argument is required: [-db DATABASE]" << std::endl;
-            exit(1);
-        }
-        _arguments[_arg_name] = args.count("-db") ? args.at("-db") : args.at("--database");
-        if (args.count("-f"))
-            _arguments[_arg_file] = args.at("-f");
-        else if (args.count("--file"))
-            _arguments[_arg_file] = args.at("--file");
-        else
-            _arguments[_arg_file] = "";
 
-        size_t default_thread_num = std::thread::hardware_concurrency();
-        if (args.count("-t") && default_thread_num >= std::stoull(args.at("-t")))
-            _arguments[_arg_thread_num] = args.at("-t");
-        else
-            _arguments[_arg_thread_num] = std::to_string(default_thread_num);
+        // if (!args.count("-db") && !args.count("--database")) {
+        //     std::cerr << "usage: hsindb query [-db DATABASE]" << std::endl;
+        //     std::cerr << "hsinDb: error: the following argument is required: [-db DATABASE]" << std::endl;
+        //     exit(1);
+        // }
+        // _arguments[_arg_name] = args.count("-db") ? args.at("-db") : args.at("--database");
+        // if (args.count("-f"))
+        //     _arguments[_arg_file] = args.at("-f");
+        // else if (args.count("--file"))
+        //     _arguments[_arg_file] = args.at("--file");
+        // else
+        //     _arguments[_arg_file] = "";
+
+        // size_t default_thread_num = std::thread::hardware_concurrency();
+        // if (args.count("-t") && default_thread_num >= std::stoull(args.at("-t")))
+        //     _arguments[_arg_thread_num] = args.at("-t");
+        // else
+        //     _arguments[_arg_thread_num] = std::to_string(default_thread_num);
     }
 
     void server(const std::unordered_map<std::string, std::string>& args) {
@@ -217,4 +218,4 @@ class ArgsParser {
     }
 };
 
-#endif  // COMPRESSED_ENCODED_TREE_INDEX_ARGS_PARSER_HPP
+#endif  // ARGS_PARSER_HPP

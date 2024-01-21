@@ -54,6 +54,9 @@ class Index {
         // std::cout << _so_predicate_array_file_size << std::endl;
         // std::cout << _os_predicate_array_file_size << std::endl;
         // std::cout << _array_file_size << std::endl;
+        // std::cout << _triplet_cnt << std::endl;
+        // std::cout << _entity_cnt << std::endl;
+        // std::cout << _predicate_cnt << std::endl;
 
         vm.close_vm();
     }
@@ -117,33 +120,102 @@ class Index {
         return true;
     }
 
-    bool sub_load_entity(int part, bool* get_all_id, phmap::flat_hash_set<std::string>* entities) {
+    // bool sub_load_entity(int part, bool* get_all_id, phmap::flat_hash_set<std::string>* entities) {
+    //     std::ifstream entity_in(_db_data_path + "ENTITY/" + std::to_string(part),
+    //                             std::ofstream::out | std::ofstream::binary);
+    //     std::string entity;
+    //     uint id = part;
+    //     if (part == 0)
+    //         id = 4;
+    //     while (std::getline(entity_in, entity)) {
+    //         id2entity[id] = entity;
+    //         entity2id[entity] = id;
+    //         if (!(*get_all_id)) {
+    //             auto it = entities->find(entity);
+    //             if (it != entities->end()) {
+    //                 entity2id[entity] = id;
+    //                 *get_all_id = entities->size() == entity2id.size();
+    //             }
+    //         }
+    //         id += 4;
+    //     }
+
+    //     entity_in.close();
+    //     return true;
+    // }
+
+    // bool sub_load_entity(int part) {
+    //     std::ifstream entity_in(_db_data_path + "ENTITY/" + std::to_string(part),
+    //                             std::ofstream::out | std::ofstream::binary);
+    //     std::string entity;
+    //     uint id = part;
+    //     if (part == 0)
+    //         id = 4;
+    //     while (std::getline(entity_in, entity)) {
+    //         id2entity[id] = entity;
+    //         id += 4;
+    //     }
+
+    //     entity_in.close();
+    //     return true;
+    // }
+
+    bool sub_build_entity2id(int part) {
         std::ifstream entity_in(_db_data_path + "ENTITY/" + std::to_string(part),
                                 std::ofstream::out | std::ofstream::binary);
+
         std::string entity;
         uint id = part;
         if (part == 0)
             id = 4;
         while (std::getline(entity_in, entity)) {
-            id2entity[id] = entity;
-            if (!(*get_all_id)) {
-                auto it = entities->find(entity);
-                if (it != entities->end()) {
-                    entity2id[entity] = id;
-                    *get_all_id = entities->size() == entity2id.size();
-                }
-            }
+            entity2id[part][entity] = id;
             id += 4;
         }
 
         entity_in.close();
         return true;
+    };
+
+    void load_data() {
+        std::vector<std::future<bool>> sub_task_list;
+
+        // bool get_all_id = entities.size() == entity2id.size();
+        entity2id = std::vector<phmap::flat_hash_map<std::string, uint>>(4);
+
+        for (int t = 0; t < 4; t++) {
+            // sub_task_list.emplace_back(std::async(std::launch::async, &Index::sub_load_entity, this, t));
+            sub_task_list.emplace_back(std::async(std::launch::async, &Index::sub_build_entity2id, this, t));
+        }
+
+        sub_task_list.emplace_back(std::async(std::launch::async, &Index::pre_load_tree, this));
+        sub_task_list.emplace_back(std::async(std::launch::async, &Index::load_predicate, this));
+
+        std::ifstream entity_ins[4];
+        for (int i = 0; i < 4; i++) {
+            entity_ins[i] = std::ifstream(_db_data_path + "ENTITY/" + std::to_string(i),
+                                          std::ofstream::out | std::ofstream::binary);
+        }
+
+        std::string entity;
+        id2entity.reserve(_entity_cnt + 1);
+        id2entity.push_back("");
+        for (uint id = 1; id <= _entity_cnt; id++) {
+            std::getline(entity_ins[id % 4], entity);
+            id2entity.push_back(entity);
+        }
+        for (int i = 0; i < 4; i++)
+            entity_ins[i].close();
+
+        for (std::future<bool>& task : sub_task_list) {
+            task.get();
+        }
     }
 
    public:
     std::vector<std::string> id2entity;
-    // std::vector<phmap::flat_hash_map<std::string, uint>> entity2id;
-    phmap::flat_hash_map<std::string, uint> entity2id;
+    std::vector<phmap::flat_hash_map<std::string, uint>> entity2id;
+    // phmap::flat_hash_map<std::string, uint> entity2id;
     std::vector<std::string> id2predicate;
     phmap::flat_hash_map<std::string, uint> predicate2id;
 
@@ -151,35 +223,46 @@ class Index {
 
     Index(std::string db_name) : _db_name(db_name) {
         _db_data_path = "./DB_DATA_ARCHIVE/" + _db_name + "/";
-        load_db_info();
-        init_vm();
-    }
-
-    void load_data(phmap::flat_hash_set<std::string>& entities) {
         auto beg = std::chrono::high_resolution_clock::now();
 
-        id2entity.reserve(_entity_cnt + 1);
-        id2entity.push_back("");
-
-        std::vector<std::future<bool>> sub_task_list;
-
-        bool get_all_id = entities.size() == entity2id.size();
-
-        for (int t = 0; t < 4; t++) {
-            sub_task_list.emplace_back(
-                std::async(std::launch::async, &Index::sub_load_entity, this, t, &get_all_id, &entities));
-        }
-        sub_task_list.emplace_back(std::async(std::launch::async, &Index::pre_load_tree, this));
-        sub_task_list.emplace_back(std::async(std::launch::async, &Index::load_predicate, this));
-
-        for (std::future<bool>& task : sub_task_list) {
-            task.get();
-        }
+        load_db_info();
+        init_vm();
+        load_data();
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> diff = end - beg;
-        std::cout << "load entity takes " << diff.count() << " ms." << std::endl;
+        std::cout << "load database success. takes " << diff.count() << " ms." << std::endl;
     }
+
+    // void load_data(phmap::flat_hash_set<std::string>& entities) {
+    //     auto beg = std::chrono::high_resolution_clock::now();
+
+    //     id2entity.reserve(_entity_cnt + 1);
+    //     id2entity.push_back("");
+
+    //     std::vector<std::future<bool>> sub_task_list;
+
+    //     bool get_all_id = entities.size() == entity2id.size();
+    //     entity2id = std::vector<phmap::flat_hash_map<std::string, uint>>(4);
+
+    //     for (int t = 0; t < 4; t++) {
+    //         sub_task_list.emplace_back(
+    //             std::async(std::launch::async, &Index::sub_load_entity, this, t, &get_all_id, &entities));
+    //         sub_task_list.emplace_back(std::async(std::launch::async, &Index::sub_build_entity2id, this,
+    //         t));
+    //     }
+
+    //     sub_task_list.emplace_back(std::async(std::launch::async, &Index::pre_load_tree, this));
+    //     sub_task_list.emplace_back(std::async(std::launch::async, &Index::load_predicate, this));
+
+    //     for (std::future<bool>& task : sub_task_list) {
+    //         task.get();
+    //     }
+
+    //     auto end = std::chrono::high_resolution_clock::now();
+    //     std::chrono::duration<double, std::milli> diff = end - beg;
+    //     std::cout << "load entity takes " << diff.count() << " ms." << std::endl;
+    // }
 
     void init_vm() {
         _btree_pos = Virtual_Memory(_db_data_path + "BTREE_POS", _btree_pos_file_size);
@@ -193,30 +276,61 @@ class Index {
         _arrays = Virtual_Memory(_db_data_path + "ARRAYS", _array_file_size);
     }
 
-    void close_vm() {
+    void close() {
         _btree_pos.close_vm();
         _btrees.close_vm();
         _predicate_array_pos.close_vm();
-        _os_predicate_array.close_vm();
+        _so_predicate_array.close_vm();
         _os_predicate_array.close_vm();
         _arrays.close_vm();
-    }
 
-    ~Index() {
-        close_vm();
+        std::vector<std::future<void>> sub_task_list;
 
-        std::vector<std::string>().swap(id2entity);
-        phmap::flat_hash_map<std::string, uint>().swap(entity2id);
-        std::vector<std::string>().swap(id2predicate);
-        phmap::flat_hash_map<std::string, uint>().swap(predicate2id);
+        sub_task_list.emplace_back(std::async(std::launch::async, [&]() {
+            for (long unsigned int i = 0; i < ps_sets.size(); i++) {
+                std::vector<uint>().swap(ps_sets[i]->result);
+                std::vector<uint>().swap(po_sets[i]->result);
+            }
+        }));
+
+        sub_task_list.emplace_back(
+            std::async(std::launch::async, [&]() { std::vector<std::string>().swap(id2entity); }));
+
+        sub_task_list.emplace_back(std::async(
+            std::launch::async, [&]() { phmap::flat_hash_map<std::string, uint>().swap(entity2id[0]); }));
+        sub_task_list.emplace_back(std::async(
+            std::launch::async, [&]() { phmap::flat_hash_map<std::string, uint>().swap(entity2id[1]); }));
+        sub_task_list.emplace_back(std::async(
+            std::launch::async, [&]() { phmap::flat_hash_map<std::string, uint>().swap(entity2id[2]); }));
+        sub_task_list.emplace_back(std::async(
+            std::launch::async, [&]() { phmap::flat_hash_map<std::string, uint>().swap(entity2id[3]); }));
+
+        sub_task_list.emplace_back(std::async(std::launch::async, [&]() {
+            std::vector<std::string>().swap(id2predicate);
+            phmap::flat_hash_map<std::string, uint>().swap(predicate2id);
+        }));
+
+        for (std::future<void>& task : sub_task_list) {
+            task.get();
+        }
 
         malloc_trim(0);
-    };
+    }
+
+    // uint get_entity_id(std::string entity) {
+    //     auto it = entity2id.find(entity);
+    //     if (it != entity2id.end()) {
+    //         return it->second;
+    //     }
+    //     return 0;
+    // }
 
     uint get_entity_id(std::string entity) {
-        auto it = entity2id.find(entity);
-        if (it != entity2id.end()) {
-            return it->second;
+        for (int part = 0; part < 4; part++) {
+            auto it = entity2id[part].find(entity);
+            if (it != entity2id[part].end()) {
+                return it->second;
+            }
         }
         return 0;
     }

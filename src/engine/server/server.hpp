@@ -76,7 +76,7 @@ std::vector<std::vector<std::string>> execute_query(std::string& sparql) {
 }
 
 void list(const httplib::Request& req, httplib::Response& res) {
-    res.set_header("Access-Control-Allow-Origin", "*");
+    // res.set_header("Access-Control-Allow-Origin", "*");
     std::cout << "Catch list request from http://" << req.remote_addr << ":" << req.remote_port << std::endl;
     nlohmann::json j;
     j["data"] = list_db();
@@ -149,36 +149,55 @@ void create(const httplib::Request& req, httplib::Response& res) {
     res.set_content(response.dump(2), "text/plain;charset=utf-8");
 }
 
+// void load_db(const httplib::Request& req, httplib::Response& res) {
+//     // 处理 CORS 头信息，适用于所有请求
+//     std::cout << "Catch switch request from http://" << req.remote_addr << ":" << req.remote_port
+//               << std::endl;
+
+//     nlohmann::json response;
+
+//     nlohmann::json body = nlohmann::json::parse(req.body);
+
+//     std::cout << body["db_name"] << std::endl;
+
+//     res.status = 200;
+// }
+
 void load_db(const httplib::Request& req, httplib::Response& res) {
-    res.set_header("Access-Control-Allow-Origin", "*");
     std::cout << "Catch switch request from http://" << req.remote_addr << ":" << req.remote_port
               << std::endl;
 
+    nlohmann::json response;
+
     nlohmann::json body = nlohmann::json::parse(req.body);
 
-    nlohmann::json response;
     if (!body.contains("db_name")) {
         response["code"] = 2;
         response["message"] = "Didn't specify a RDF name";
+        res.status = 200;
         res.set_content(response.dump(2), "text/plain;charset=utf-8");
         return;
     }
 
     std::string new_db_name = body["db_name"];
+
     if (new_db_name == db_name) {
         response["code"] = 3;
         response["message"] = "Same RDF, no need to switch";
+        res.status = 200;
         res.set_content(response.dump(2), "text/plain;charset=utf-8");
         return;
     }
 
     db_index = std::make_shared<Index>(new_db_name);
-    std::cout << new_db_name << std::endl;
+    phmap::flat_hash_set<std::string> entities;
+
     db_name = new_db_name;
 
     response["code"] = 1;
-    response["message"] = "RDF have been switched to " + new_db_name;
-    std::cout << "RDF have been switched into <" << new_db_name << ">." << std::endl;
+    response["message"] = "RDF have been switched to " + db_name;
+    std::cout << "RDF have been switched into <" << db_name << ">." << std::endl;
+    res.status = 200;
     res.set_content(response.dump(2), "text/plain;charset=utf-8");
 }
 
@@ -214,9 +233,16 @@ bool start_server(std::string port) {
     std::cout << "Running at: http://127.0.0.1:" << port << std::endl;
 
     httplib::Server svr;
+
+    svr.set_default_headers({{"Access-Control-Allow-Origin", "*"},
+                             {"Access-Control-Allow-Methods", "POST, GET, PUT, OPTIONS, DELETE"},
+                             {"Access-Control-Max-Age", "3600"},
+                             {"Access-Control-Allow-Headers", "*"},
+                             {"Content-Type", "application/json;charset=utf-8"}});
+
     svr.set_base_dir("./");
 
-    std::string base_url = "/ceirs";
+    std::string base_url = "/peirs";
 
     svr.Post(base_url + "/create", create);    // create RDF
     svr.Post(base_url + "/load_db", load_db);  // load RDF

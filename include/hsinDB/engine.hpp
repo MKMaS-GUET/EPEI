@@ -6,8 +6,8 @@
  * @Description:
  */
 
-#ifndef COMPRESSED_ENCODED_TREE_INDEX_ENGINE_HPP
-#define COMPRESSED_ENCODED_TREE_INDEX_ENGINE_HPP
+#ifndef ENGINE_HPP
+#define ENGINE_HPP
 
 #include <memory>
 #include <string>
@@ -36,4 +36,4 @@ class Engine {
 
 }  // namespace hsinDB
 
-#endif  // COMPRESSED_ENCODED_TREE_INDEX_ENGINE_HPP
+#endif  // ENGINE_HPP

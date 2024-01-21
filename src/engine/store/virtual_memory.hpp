@@ -6,7 +6,6 @@
 #include <unistd.h>
 #include <string>
 
-
 class Virtual_Memory {
     uint* _vm;
     int _fd;
@@ -42,9 +41,20 @@ class Virtual_Memory {
     }
 
     void close_vm() {
-        msync(_vm, _file_size, MS_SYNC);
-        munmap(_vm, _file_size);
-        close(_fd);
+        if (msync(_vm, _file_size, MS_SYNC) == -1) {
+            std::cout << _file_size << std::endl;
+            perror("Error syncing memory to disk");
+        }
+
+        if (munmap(_vm, _file_size) == -1) {
+            std::cout << _file_size << std::endl;
+            perror("Error unmapping memory");
+        }
+
+        if (close(_fd) == -1) {
+            std::cout << _file_size << std::endl;
+            perror("Error closing file descriptor");
+        }
     }
 
     uint& operator[](uint index) {

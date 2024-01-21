@@ -357,11 +357,11 @@ class QueryExecutor {
                         Result_Vector_list.add_range(stat.plan[stat.level][idx].search_range);
                     }
                 } else {
-                    std::shared_ptr<Result_Vector> rv = std::make_shared<Result_Vector>(it->second->size());
-                    for (long unsigned int j = 0; j < it->second->size(); j++) {
-                        rv->result[j] = it->second->at(j);
+                    stat.candidate_result[stat.level]->reserve(it->second->size());
+                    for (auto iter = it->second->begin(); iter != it->second->end(); iter++) {
+                        stat.candidate_result[stat.level]->emplace_back(std::move(*iter));
                     }
-                    Result_Vector_list.add_range(rv);
+                    return;
                 }
             } else {
                 for (const auto& idx : item_other_type_indices) {
@@ -382,9 +382,10 @@ class QueryExecutor {
             } else {
                 // std::cout << join_case << std::endl;
                 std::shared_ptr<Result_Vector> range = Result_Vector_list.shortest();
+                stat.candidate_result[stat.level]->reserve(range->result.size());
+
                 for (auto it = range->result.begin(); it != range->result.end(); it++) {
                     stat.candidate_result[stat.level]->emplace_back(std::move(*it));
-                    // stat.candidate_result[stat.level]->push_back(*it);
                 }
             }
         }
@@ -526,4 +527,4 @@ class QueryExecutor {
     // std::vector<std::pair<> cache;
 };
 
-#endif  // COMPRESSED_ENCODED_TREE_INDEX_QUERY_EXECUTOR_HPP
+#endif  // QUERY_EXECUTOR_HPP

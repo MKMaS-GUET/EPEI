@@ -6,8 +6,8 @@
  * @Description: 
  */
 
-#ifndef COMPRESSED_ENCODED_TREE_INDEX_THREAD_POOL_HPP
-#define COMPRESSED_ENCODED_TREE_INDEX_THREAD_POOL_HPP
+#ifndef THREAD_POOL_HPP
+#define THREAD_POOL_HPP
 
 /**
  * @file BS_thread_pool.hpp
@@ -827,4 +827,4 @@ namespace BS
 
 } // namespace BS
 
-#endif //COMPRESSED_ENCODED_TREE_INDEX_THREAD_POOL_HPP
+#endif //THREAD_POOL_HPP

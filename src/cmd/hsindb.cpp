@@ -13,10 +13,10 @@ void build(const std::unordered_map<std::string, std::string>& arguments) {
 }
 
 void query(const std::unordered_map<std::string, std::string>& arguments) {
-    std::string db_name = arguments.at("name");
-    std::string sparql_file = arguments.at("file");
+    // std::string db_name = arguments.at("name");
+    // std::string sparql_file = arguments.at("file");
 
-    hsinDB::Engine::Query(db_name, sparql_file);
+    hsinDB::Engine::Query("name", "file");
 }
 
 void server(const std::unordered_map<std::string, std::string>& arguments) {
