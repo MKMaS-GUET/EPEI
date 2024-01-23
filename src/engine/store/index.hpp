@@ -61,26 +61,26 @@ class Index {
         vm.close_vm();
     }
 
-    bool sub_build_id2entity(uint entity_cnt) {
-        std::ifstream entity_ins[4];
-        for (int i = 0; i < 4; i++) {
-            entity_ins[i] = std::ifstream(_db_data_path + "ENTITY/" + std::to_string(i),
-                                          std::ofstream::out | std::ofstream::binary);
-        }
+    // bool sub_build_id2entity(uint entity_cnt) {
+    //     std::ifstream entity_ins[4];
+    //     for (int i = 0; i < 4; i++) {
+    //         entity_ins[i] = std::ifstream(_db_data_path + "ENTITY/" + std::to_string(i),
+    //                                       std::ofstream::out | std::ofstream::binary);
+    //     }
 
-        std::string entity;
-        id2entity.reserve(_entity_cnt + 1);
-        id2entity.push_back("");
-        for (uint id = 1; id <= entity_cnt; id++) {
-            std::getline(entity_ins[id % 4], entity);
-            id2entity.push_back(entity);
-        }
+    //     std::string entity;
+    //     id2entity.reserve(_entity_cnt + 1);
+    //     id2entity.push_back("");
+    //     for (uint id = 1; id <= entity_cnt; id++) {
+    //         std::getline(entity_ins[id % 4], entity);
+    //         id2entity.push_back(entity);
+    //     }
 
-        for (int i = 0; i < 4; i++)
-            entity_ins[i].close();
+    //     for (int i = 0; i < 4; i++)
+    //         entity_ins[i].close();
 
-        return true;
-    };
+    //     return true;
+    // };
 
     bool load_predicate() {
         std::ifstream predicate_in(_db_data_path + "PREDICATE", std::ofstream::out | std::ofstream::binary);
@@ -191,29 +191,37 @@ class Index {
         sub_task_list.emplace_back(std::async(std::launch::async, &Index::pre_load_tree, this));
         sub_task_list.emplace_back(std::async(std::launch::async, &Index::load_predicate, this));
 
-        std::ifstream entity_ins[4];
-        for (int i = 0; i < 4; i++) {
-            entity_ins[i] = std::ifstream(_db_data_path + "ENTITY/" + std::to_string(i),
-                                          std::ofstream::out | std::ofstream::binary);
-        }
+        // std::ifstream entity_ins[4];
+        // for (int i = 0; i < 4; i++) {
+        //     entity_ins[i] = std::ifstream(_db_data_path + "ENTITY/" + std::to_string(i),
+        //                                   std::ofstream::out | std::ofstream::binary);
+        // }
 
-        std::string entity;
-        id2entity.reserve(_entity_cnt + 1);
-        id2entity.push_back("");
-        for (uint id = 1; id <= _entity_cnt; id++) {
-            std::getline(entity_ins[id % 4], entity);
-            id2entity.push_back(entity);
-        }
-        for (int i = 0; i < 4; i++)
-            entity_ins[i].close();
+        // std::string entity;
+        // id2entity.reserve(_entity_cnt + 1);
+        // id2entity.push_back("");
+        // for (uint id = 1; id <= _entity_cnt; id++) {
+        //     std::getline(entity_ins[id % 4], entity);
+        //     id2entity.push_back(entity);
+        // }
+        // for (int i = 0; i < 4; i++)
+        //     entity_ins[i].close();
 
         for (std::future<bool>& task : sub_task_list) {
             task.get();
         }
+
+        id2entity.reserve(_entity_cnt + 1);
+        for (int part = 0; part < 4; part++) {
+            for (auto it = entity2id[part].begin(); it != entity2id[part].end(); it++) {
+                id2entity[it->second] = &it->first;
+            }
+        }
     }
 
    public:
-    std::vector<std::string> id2entity;
+    // std::vector<std::string> id2entity;
+    std::vector<const std::string*> id2entity;
     std::vector<phmap::flat_hash_map<std::string, uint>> entity2id;
     // phmap::flat_hash_map<std::string, uint> entity2id;
     std::vector<std::string> id2predicate;
@@ -294,7 +302,9 @@ class Index {
         }));
 
         sub_task_list.emplace_back(
-            std::async(std::launch::async, [&]() { std::vector<std::string>().swap(id2entity); }));
+            std::async(std::launch::async, [&]() { std::vector<const std::string*>().swap(id2entity); }));
+        // sub_task_list.emplace_back(
+        // std::async(std::launch::async, [&]() { std::vector<std::string>().swap(id2entity); }));
 
         sub_task_list.emplace_back(std::async(
             std::launch::async, [&]() { phmap::flat_hash_map<std::string, uint>().swap(entity2id[0]); }));

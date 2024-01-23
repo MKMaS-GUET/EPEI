@@ -101,7 +101,7 @@ class IndexBuilder {
     std::string _data_file;
     std::string _db_data_path;
     std::string _db_name;
-    uint _threads = 3;
+    uint _threads = 6;
 
     // uint _btree_file_size = 0;
     uint _btree_pos_file_size = 0;

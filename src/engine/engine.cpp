@@ -8,7 +8,7 @@
 
 #include "engine-impl.hpp"
 
-namespace hsinDB {
+namespace epei {
 
 void Engine::Create(const std::string& db_name, const std::string& data_file) {
     auto impl = std::make_shared<Engine::Impl>();
@@ -20,9 +20,9 @@ void Engine::Query(const std::string& db_name, const std::string& data_file) {
     impl->query(db_name, data_file);
 }
 
-void Engine::Server(const std::string& port) {
+void Engine::Server(const std::string& ip, const std::string& port) {
     auto impl = std::make_shared<Engine::Impl>();
-    impl->server(port);
+    impl->server(ip, port);
 }
 
-}  // namespace hsinDB
+}  // namespace epei

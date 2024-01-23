@@ -7,18 +7,18 @@
 #include "../store/index.hpp"
 #include "./query_plan.hpp"
 
-void query_result(std::vector<std::vector<uint>>& results_id,
-                 std::string& results,
-                 const std::shared_ptr<Index>& index,
-                 const std::shared_ptr<QueryPlan>& query_plan,
-                 const std::shared_ptr<SPARQLParser>& parser) {
+uint query_result(std::vector<std::vector<uint>>& results_id,
+                  std::string& results,
+                  const std::shared_ptr<Index>& index,
+                  const std::shared_ptr<QueryPlan>& query_plan,
+                  const std::shared_ptr<SPARQLParser>& parser) {
     auto last = results_id.end();
     const auto& modifier = parser->project_modifier();
     // 获取每一个变量的id（优先级顺序）
     const auto variable_indexes = query_plan->mapping_variable2idx(parser->project_variables());
 
     std::stringstream ss;
-    int cnt = 0;
+    uint cnt = 0;
     if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {
         last = std::unique(results_id.begin(), results_id.end(),
                            // 判断两个列表 a 和 b 是否相同，
@@ -31,7 +31,7 @@ void query_result(std::vector<std::vector<uint>>& results_id,
         for (auto it = results_id.begin(); it != last; ++it) {
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
-                ss << index->id2entity[item[idx]];
+                ss << index->id2entity[item[idx]]->c_str();
                 ss << "";
             }
             ss << "\n";
@@ -42,17 +42,15 @@ void query_result(std::vector<std::vector<uint>>& results_id,
         for (auto it = results_id.begin(); it != last; ++it) {
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
-                ss << index->id2entity[item[idx]];
+                ss << index->id2entity[item[idx]]->c_str();
                 ss << "";
             }
             ss << "\n";
         }
     }
 
-    ss << "\n" + std::to_string(cnt) + " result(s)\n";
-
     results = ss.str();
-
+    return cnt;
 }
 
 int query_result(std::vector<std::vector<uint>>& result,
@@ -77,7 +75,7 @@ int query_result(std::vector<std::vector<uint>>& result,
         for (auto it = result.begin(); it != last; ++it) {
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
-                printf("%s ", index->id2entity[item[idx]].c_str());
+                printf("%s ", index->id2entity[item[idx]]->c_str());
             }
             cnt++;
             printf("\n");
@@ -87,7 +85,7 @@ int query_result(std::vector<std::vector<uint>>& result,
         for (auto it = result.begin(); it != last; ++it) {
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
-                printf("%s ", index->id2entity[item[idx]].c_str());
+                printf("%s ", index->id2entity[item[idx]]->c_str());
             }
             printf("\n");
         }
@@ -120,7 +118,7 @@ int query_result(std::vector<std::vector<uint>>& result,
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
                 // index->id2entity[item[idx]].c_str();
-                fprintf(output_file, "%s ", index->id2entity[item[idx]].c_str());
+                fprintf(output_file, "%s ", index->id2entity[item[idx]]->c_str());
             }
             cnt++;
             fprintf(output_file, "\n");
@@ -131,7 +129,7 @@ int query_result(std::vector<std::vector<uint>>& result,
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
                 // index->id2entity[item[idx]].c_str();
-                fprintf(output_file, "%s ", index->id2entity[item[idx]].c_str());
+                fprintf(output_file, "%s ", index->id2entity[item[idx]]->c_str());
             }
             fprintf(output_file, "\n");
         }

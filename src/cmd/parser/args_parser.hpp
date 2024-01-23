@@ -28,6 +28,7 @@ class ArgsParser {
 
     const std::string _arg_name = "name";
     const std::string _arg_file = "file";
+    const std::string _arg_ip = "ip";
     const std::string _arg_port = "port";
     const std::string _arg_thread_num = "thread_num";
     const std::string _arg_chunk_size = "chunk_size";
@@ -46,26 +47,26 @@ class ArgsParser {
     };
 
     const std::string _help_info =
-        "usage: hsindb <command> [<args>]"
-        "\nThese are common commands used in various situations:"
-        "\n  build                build the data index for the given RDF data file path:"
-        "\n    -db,--database DATABASE       specify the database name"
-        "\n    -f,--file FILE       specify the RDF data file path"
+        "Usage: epei <command> [<args>]\n"
         "\n"
-        "\n  query                query the SPARQL statement for the given file path:"
-        "\n    -db,--database DATABASE       specify the database name"
-        "\n    -f,--file FILE       specify the SPARQL statement file path"
-        //                                   "\n"
-        //                                   "\n  serve                start the HTTP serve for the hsinDB:"
-        //                                   "\n    -db,--database DATABASE       specify the database name"
-        //                                   "\n    -p,--port PORT       specify the HTTP server port"
+        "Description:\n"
+        "  Common commands for various situations using EPEI.\n"
         "\n"
-        "\npositional arguments:"
-        "\n  command              the command to run, e.g. build, query, serve"
+        "Commands:\n"
+        "  build      Build the data index for the given RDF data file path.\n"
+        "  query      Query the SPARQL statement for the given file path.\n"
+        "  server     Start the EPEI server.\n"
         "\n"
-        "\noptional arguments"
-        "\n  -h,--help            show this help message and exit"
-        "\n";
+        "Options:\n"
+        "  -h, --help      Show this help message and exit.\n"
+        "\n"
+        "Command-specific options:\n"
+        "  build:\n"
+        "    -n, --name <NAME>    Specify the database name.\n"
+        "    -f, --file <FILE>    Specify the RDF data file path.\n"
+        "\n"
+        "Positional Arguments:\n"
+        "  command       The command to run (e.g., build, query, server).\n";
 
    private:
     std::unordered_map<std::string, std::string> _arguments;
@@ -74,7 +75,7 @@ class ArgsParser {
     Command_T parse(int argc, char** argv) {
         if (argc == 1) {
             std::cout << _help_info << std::endl;
-            std::cerr << "hsinDB: error: the following arguments are required: command" << std::endl;
+            std::cerr << "epei: error: the following arguments are required: command" << std::endl;
             exit(1);
         }
 
@@ -87,7 +88,7 @@ class ArgsParser {
 
         if (!_position.count(argv1)) {
             std::cout << _help_info << std::endl;
-            std::cerr << "hsinDB: error: the following arguments are required: command" << std::endl;
+            std::cerr << "epei: error: the following arguments are required: command" << std::endl;
             exit(1);
         }
 
@@ -120,37 +121,40 @@ class ArgsParser {
 
    private:
     const std::string _build_info =
-        "usage: hsindb build [-db DATABASE] [-f FILE]"
-        "\nbuild the data index for the given RDF data file path"
+        "Usage: epei build [-n,--name NAME] [-f,--file FILE]\n"
         "\n"
-        "\n  -db,--database DATABASE       specify the database name"
-        "\n  -f,--file FILE                specify the RDF data file path"
+        "Description:\n"
+        "Build the data index for the given RDF data file path.\n"
         "\n"
-        "\noptional arguments"
-        "\n  -h,--help                     show this help message and exit"
-        "\n";
+        "Options:\n"
+        "  -n, --name <NAME>   Specify the database name.\n"
+        "  -f, --file <FILE>   Specify the RDF data file path.\n"
+        "\n"
+        "Optional Arguments:\n"
+        "  -h, --help          Show this help message and exit.\n"
+        "\n"
+        "Examples:\n"
+        "  epei build -n my_database -f /path/to/data.rdf\n";
 
     const std::string _query_info =
-        "usage: hsindb query [-db DATABASE] [-f FILE]"
-        "\nquery the SPARQL statement for the given file path"
-        "\n"
-        "\n  -db,--database DATABASE       specify the database name"
-        "\n  -f,--file FILE                specify the SPARQL statement file path"
-        "\n"
-        "\noptional arguments"
-        "\n  -h,--help                     show this help message and exit"
-        "\n  -t                            specify the number of threads you need to use"
+        "usage: epei query"
         "\n";
 
     const std::string _serve_info =
-        "usage: hsindb serve [-db DATABASE] [-p port]"
-        "\nstart the HTTP serve for hsinDB"
+        "Usage: epei server [-p,--port PORT]\n"
         "\n"
-        "\n  -p,--port PORT                specify the HTTP server port"
+        "Description:\n"
+        "  Start the HTTP server for EPEI.\n"
         "\n"
-        "\noptional arguments"
-        "\n  -h,--help                     show this help message and exit"
-        "\n";
+        "Options:\n"
+        "  -ip                 Specify the HTTP server ip.\n"
+        "  -p, --port <PORT>   Specify the HTTP server port.\n"
+        "\n"
+        "Optional Arguments:\n"
+        "  -h, --help          Show this help message and exit.\n"
+        "\n"
+        "Examples:\n"
+        "  epei server --port 8080;\n";
 
    private:
     void build(const std::unordered_map<std::string, std::string>& args) {
@@ -160,8 +164,8 @@ class ArgsParser {
         }
         if ((!args.count("-db") && !args.count("--database")) ||
             (!args.count("-f") && !args.count("--file"))) {
-            std::cerr << "usage: hsindb build [-db DATABASE] [-f FILE]" << std::endl;
-            std::cerr << "hsinDb: error: the following arguments are required: [-db DATABASE] [-f FILE]"
+            std::cerr << "usage: epei build [-db DATABASE] [-f FILE]" << std::endl;
+            std::cerr << "epei: error: the following arguments are required: [-db DATABASE] [-f FILE]"
                       << std::endl;
             exit(1);
         }
@@ -176,8 +180,8 @@ class ArgsParser {
         }
 
         // if (!args.count("-db") && !args.count("--database")) {
-        //     std::cerr << "usage: hsindb query [-db DATABASE]" << std::endl;
-        //     std::cerr << "hsinDb: error: the following argument is required: [-db DATABASE]" << std::endl;
+        //     std::cerr << "usage: epei query [-db DATABASE]" << std::endl;
+        //     std::cerr << "epei: error: the following argument is required: [-db DATABASE]" << std::endl;
         //     exit(1);
         // }
         // _arguments[_arg_name] = args.count("-db") ? args.at("-db") : args.at("--database");
@@ -200,14 +204,15 @@ class ArgsParser {
             std::cout << _serve_info << std::endl;
             exit(1);
         }
-        if (!args.count("-p") && !args.count("--port")) {
-            std::cerr << "usage: hsindb serve [-p PORT]" << std::endl;
-            std::cerr << "hsinDb: error: the following arguments are required: [-p PORT]" << std::endl;
+        if ((!args.count("-p") && !args.count("--port")) || !args.count("-ip")) {
+            std::cerr << "usage: epei server [-ip IP] [-p PORT]" << std::endl;
+            std::cerr << "epei: error: the following arguments are required: [-ip IP] [-p PORT]" << std::endl;
             exit(1);
         }
+        _arguments[_arg_ip] = args.at("-ip");
         _arguments[_arg_port] = args.count("-p") ? args.at("-p") : args.at("--port");
         if (!isNumber(_arguments[_arg_port])) {
-            std::cerr << "hsinDb: error: the argument [-p PORT] requires a number, but got "
+            std::cerr << "epei: error: the argument [-p PORT] requires a number, but got "
                       << _arguments[_arg_port] << std::endl;
             exit(1);
         }

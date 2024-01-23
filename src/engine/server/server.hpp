@@ -1,21 +1,15 @@
-﻿/*
- * @FileName   : psoHttp.cpp
- * @CreateAt   : 2021/10/22
- * @Author     : Inno Fang
- * @Email      : innofang@yeah.net
- * @Description:
- */
+﻿#ifndef SERVER_HPP
+#define SERVER_HPP
 
+#include <httplib.h>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <nlohmann/json.hpp>
 #include <set>
 #include <string>
 #include <unordered_set>
 #include <utility>
-
-#include <httplib.h>
-#include <filesystem>
-#include <nlohmann/json.hpp>
 
 #include "../parser/sparql_parser.hpp"
 #include "../query/query_executor.hpp"
@@ -45,7 +39,7 @@ std::vector<std::string> list_db() {
     return rdf_db_list;
 }
 
-std::string execute_query(std::string& sparql) {
+std::string execute_query(std::string& sparql, nlohmann::json& res) {
     if (db_index == 0) {
         std::cout << "database doesn't be loaded correctly." << std::endl;
         return {};
@@ -63,21 +57,26 @@ std::string execute_query(std::string& sparql) {
     executor->query();
 
     std::vector<std::vector<uint>> results_id = executor->result();
-    if (results_id.empty()) {
-        return {};
-    }
 
     auto variables = parser->project_variables();
 
     auto finish = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> diff = finish - start;
-    
-    std::string results;
 
-    query_result(results_id, results, db_index, query_plan, parser);
+    std::string results = "0 result";
 
-    results.append("execution time: " + std::to_string(diff.count()) + "ms.");
+    uint cnt = 0;
+    if (results_id.size() != 0) {
+        cnt = query_result(results_id, results, db_index, query_plan, parser);
+    }
 
+    res["results"] = results;
+    res["cnt"] = std::to_string(cnt);
+
+    double time = diff.count();
+    int integer_part = static_cast<int>(time);
+    int decimal_part = static_cast<int>((time - integer_part) * 100);
+    res["time"] = std::to_string(integer_part).append(".").append(std::to_string(decimal_part));
     return results;
 }
 
@@ -113,9 +112,8 @@ void query(const httplib::Request& req, httplib::Response& res) {
     }
     std::string sparql = body["sparql"];
     nlohmann::json response;
-    response["data"] = execute_query(sparql);
-
-    // response["data"] += "\n execute time: " + std::to_string(diff.count()) + "ms.";
+    if (db_name != "")
+        execute_query(sparql, response);
 
     res.set_content(response.dump(2), "text/plain;charset=utf-8");
 }
@@ -126,13 +124,13 @@ void create(const httplib::Request& req, httplib::Response& res) {
 
     nlohmann::json body = nlohmann::json::parse(req.body);
     nlohmann::json response;
-    if (!body.contains("db_name")) {
+    if (!body.contains("db_name") || body["db_name"] == "") {
         response["code"] = 5;
         response["message"] = "Didn't specify a rdf name";
         res.set_content(response.dump(2), "text/plain;charset=utf-8");
         return;
     }
-    if (!body.contains("file_name")) {
+    if (!body.contains("file_name") || body["file_name"] == "") {
         response["code"] = 6;
         response["message"] = "Didn't specify a data file name";
         res.set_content(response.dump(2), "text/plain;charset=utf-8");
@@ -180,7 +178,7 @@ void load_db(const httplib::Request& req, httplib::Response& res) {
         return;
     }
 
-    if (db_index)
+    if (db_name != "")
         db_index->close();
 
     db_index = std::make_shared<Index>(new_db_name);
@@ -191,6 +189,62 @@ void load_db(const httplib::Request& req, httplib::Response& res) {
     response["code"] = 1;
     response["message"] = "RDF have been switched to " + db_name;
     std::cout << "RDF have been switched into <" << db_name << ">." << std::endl;
+    res.status = 200;
+    res.set_content(response.dump(2), "text/plain;charset=utf-8");
+}
+
+void close_db(const httplib::Request& req, httplib::Response& res) {
+    std::cout << "Catch close request from http://" << req.remote_addr << ":" << req.remote_port << std::endl;
+    if (db_name != "") {
+        db_index->close();
+        db_name = "";
+    }
+
+    nlohmann::json response;
+    response["code"] = 1;
+    response["message"] = "RDF have been closed";
+    std::cout << "RDF have been closed" << std::endl;
+    res.status = 200;
+    res.set_content(response.dump(2), "text/plain;charset=utf-8");
+}
+
+void delete_db(const httplib::Request& req, httplib::Response& res) {
+    std::cout << "Catch delete request from http://" << req.remote_addr << ":" << req.remote_port
+              << std::endl;
+
+    nlohmann::json response;
+
+    nlohmann::json body = nlohmann::json::parse(req.body);
+
+    if (!body.contains("db_name")) {
+        response["code"] = 2;
+        response["message"] = "Didn't specify a RDF name";
+        res.status = 200;
+        res.set_content(response.dump(2), "text/plain;charset=utf-8");
+        return;
+    }
+
+    std::string delete_db_name = body["db_name"];
+
+    if (delete_db_name == db_name && db_name != "") {
+        db_index->close();
+    }
+    db_name = "";
+
+    try {
+        std::string path = "./DB_DATA_ARCHIVE/" + delete_db_name;
+        fs::remove_all(path);
+    } catch (const std::exception& e) {
+        response["code"] = 3;
+        response["message"] = "Fail to delete DB";
+        res.status = 200;
+        res.set_content(response.dump(2), "text/plain;charset=utf-8");
+        return;
+    }
+
+    response["code"] = 1;
+    response["message"] = db_name + " RDF have been deleted";
+    std::cout << "RDF have been deleted" << std::endl;
     res.status = 200;
     res.set_content(response.dump(2), "text/plain;charset=utf-8");
 }
@@ -222,8 +276,8 @@ void upload(const httplib::Request& req, httplib::Response& res) {
     res.set_content(j.dump(2), "text/plain;charset=utf-8");
 }
 
-bool start_server(std::string port) {
-    std::cout << "Running at: http://127.0.0.1:" << port << std::endl;
+bool start_server(std::string ip, std::string port) {
+    std::cout << "Running at:" + ip + ":" << port << std::endl;
 
     httplib::Server svr;
 
@@ -237,18 +291,22 @@ bool start_server(std::string port) {
 
     std::string base_url = "/peirs";
 
-    svr.Post(base_url + "/create", create);    // create RDF
-    svr.Post(base_url + "/load_db", load_db);  // load RDF
-    svr.Get(base_url + "/list", list);         // list RDF
-    svr.Get(base_url + "/info", info);         // show RDF information
-    svr.Post(base_url + "/upload", upload);    // upload RDF file
-    svr.Post(base_url + "/query", query);      // query on RDF
+    svr.Post(base_url + "/create", create);     // create RDF
+    svr.Post(base_url + "/load_db", load_db);   // load RDF
+    svr.Get(base_url + "/close", close_db);     // close RDF
+    svr.Post(base_url + "/delete", delete_db);  // delete RDF
+    svr.Get(base_url + "/list", list);          // list RDF
+    svr.Get(base_url + "/info", info);          // show RDF information
+    svr.Post(base_url + "/upload", upload);     // upload RDF file
+    svr.Post(base_url + "/query", query);       // query on RDF
 
     svr.Options(base_url + "/load_db",
                 [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
     svr.Options(base_url + "/create",
                 [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
     svr.Options(base_url + "/query",
+                [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
+    svr.Options(base_url + "/delete",
                 [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
 
     // disconnect
@@ -260,6 +318,8 @@ bool start_server(std::string port) {
         svr.stop();
         res.set_content(j.dump(2), "text/plain;charset=utf-8");
     });
-    svr.listen("127.0.0.1", std::stoi(port));
+    svr.listen(ip, std::stoi(port));
     return 0;
 }
+
+#endif

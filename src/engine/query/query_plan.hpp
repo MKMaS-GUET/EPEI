@@ -323,7 +323,7 @@ class QueryPlan {
 
     void generate(const std::shared_ptr<Index>& index,
                   const std::vector<std::vector<std::string>>& triple_list) {
-        bool debug = false;
+        bool debug = true;
 
         // 变量名 -> 出现此变量的三元组id（可以重复）
         // 一个变量对应的的 id 的越多，表明在此变量上执行的连接次数就越多

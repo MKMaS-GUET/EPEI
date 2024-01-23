@@ -222,9 +222,6 @@ class QueryExecutor {
             Result_Vector_list.clear();
             key.str("");
         }
-        // for (auto it = cache.begin(); it != cache.end(); it++) {
-        //     std::cout << it->first << " " << it->second->size() << std::endl;
-        // }
         return true;
     }
 

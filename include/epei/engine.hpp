@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace hsinDB {
+namespace epei {
 
 class Engine {
    private:
@@ -28,12 +28,12 @@ class Engine {
 
     static void Query(const std::string& db_name, const std::string& data_file);
 
-    static void Server(const std::string& port);
+    static void Server(const std::string& ip, const std::string& port);
 
    public:
     std::shared_ptr<Impl> _impl;
 };
 
-}  // namespace hsinDB
+}  // namespace epei
 
 #endif  // ENGINE_HPP

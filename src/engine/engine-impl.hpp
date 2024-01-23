@@ -13,7 +13,7 @@
 #include <memory>
 #include <string>
 
-#include <hsinDB/engine.hpp>
+#include <epei/engine.hpp>
 
 #include "parser/sparql_parser.hpp"
 #include "query/query_executor.hpp"
@@ -23,7 +23,7 @@
 #include "store/build_index.hpp"
 #include "store/index.hpp"
 
-class hsinDB::Engine::Impl {
+class epei::Engine::Impl {
    public:
     void create(const std::string& db_name, const std::string& data_file) {
         auto beg = std::chrono::high_resolution_clock::now();
@@ -109,11 +109,27 @@ class hsinDB::Engine::Impl {
     }
 
     void query(const std::string& name, const std::string& file) {
+        std::string db_help = "select [database name]";
+        std::string query_help =
+            "Usage: sparql [options]\n"
+            "\n"
+            "Description:\n"
+            "  Run a SPARQL query.\n"
+            "\n\n"
+            "Usage: file [options] [arguments]\n"
+            "\n"
+            "Description:\n"
+            "  Run SPARQL queries from a file and output the results to a file.\n"
+            "\n"
+            "Options:\n"
+            "  -i, --input <file>    Specify the input file containing SPARQL queries.\n"
+            "  -o, --output [file]   Specify the output file for the query results.\n";
+
         std::string cmd;
         std::string db;
         std::shared_ptr<Index> index;
+        list_db();
         while (true) {
-            list_db();
             std::cout << ">";
 
             std::cin >> cmd;
@@ -146,18 +162,16 @@ class hsinDB::Engine::Impl {
                     if (cmd == "sparql") {
                         sparqls.push_back(sparql);
                         execute_sparql(sparqls, index, "");
-                    }
-
-                    if (cmd == "file") {
+                    } else if (cmd == "file") {
                         std::string rest_cmd = sparql;
                         std::istringstream iss(sparql);
                         std::string token;
 
                         std::string input_file, output_file = "";
                         while (iss >> token) {
-                            if (token == "-i") {
+                            if (token == "-i" || token == "--input") {
                                 iss >> input_file;
-                            } else if (token == "-o") {
+                            } else if (token == "-o" || token == "--output") {
                                 iss >> output_file;
                             }
                         }
@@ -173,27 +187,32 @@ class hsinDB::Engine::Impl {
                             }
                             execute_sparql(sparqls, index, output_file);
                         }
-                    }
-
-                    if (cmd == "change") {
+                    } else if (cmd == "help") {
+                        std::cout << query_help << std::endl;
+                    } else if (cmd == "change") {
                         index->close();
+                        list_db();
                         break;
-                    }
-
-                    if (cmd == "exit") {
+                    } else if (cmd == "exit") {
                         exit(0);
+                    } else {
+                        std::cout << query_help << std::endl;
                     }
                 }
 
+            } else if (cmd == "help") {
+                std::cout << db_help << std::endl;
             } else if (cmd == "exit") {
                 exit(0);
+            } else {
+                list_db();
             }
         }
 
         // parse SPARQL statement
     }
 
-    void server(const std::string& port) { start_server(port); }
+    void server(const std::string& ip, const std::string& port) { start_server(ip, port); }
 
    private:
     void list_db() {
@@ -211,6 +230,9 @@ class hsinDB::Engine::Impl {
                 std::cout << "   " << dir_name << std::endl;
             }
         }
+
+        std::cout << "\nExamples:" << std::endl;
+        std::cout << "  select database_name" << std::endl;
     }
 
     // void get_entity(phmap::flat_hash_set<std::string>& entities, std::string sparql) {

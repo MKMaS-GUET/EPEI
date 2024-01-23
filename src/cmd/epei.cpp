@@ -2,26 +2,27 @@
 #include <iterator>
 #include <sstream>
 
-#include <hsinDB/engine.hpp>
+#include <epei/engine.hpp>
 
 #include "parser/args_parser.hpp"
 
 void build(const std::unordered_map<std::string, std::string>& arguments) {
     std::string db_name = arguments.at("name");
     std::string data_file = arguments.at("file");
-    hsinDB::Engine::Create(db_name, data_file);
+    epei::Engine::Create(db_name, data_file);
 }
 
 void query(const std::unordered_map<std::string, std::string>& arguments) {
     // std::string db_name = arguments.at("name");
     // std::string sparql_file = arguments.at("file");
 
-    hsinDB::Engine::Query("name", "file");
+    epei::Engine::Query("name", "file");
 }
 
 void server(const std::unordered_map<std::string, std::string>& arguments) {
+    std::string ip = arguments.at("ip");
     std::string port = arguments.at("port");
-    hsinDB::Engine::Server(port);
+    epei::Engine::Server(ip, port);
 }
 
 struct EnumClassHash {
