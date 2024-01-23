@@ -2,7 +2,7 @@
 
 An RDF Retrieval System Based on **E**fficient **P**redicate-**E**ntity **I**ndexing
 
-A vue front-end id avaiable  [here](https://github.com/LiuYipeng42/RDF_Retrieval_System).
+A Vue front-end is avaiable  [here](https://github.com/LiuYipeng42/RDF_Retrieval_System).
 
 ## How to build
 
