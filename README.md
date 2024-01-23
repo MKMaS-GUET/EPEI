@@ -2,6 +2,8 @@
 
 An RDF Retrieval System Based on **E**fficient **P**redicate-**E**ntity **I**ndexing
 
+A vue front-end id avaiable  [here](https://github.com/LiuYipeng42/RDF_Retrieval_System).
+
 ## How to build
 
 1. Clone this project
@@ -29,6 +31,12 @@ Or use the `build.sh` script to build this project directly
 ```shell
 ./scripts/build.sh
 ```
+
+## RDF data and Queries
+
+Download the RDF data and queries that we want to use:
+- 1 [Watdiv100M](https://mega.nz/folder/4r1iRCZZ#JKCi9mCCMKOaXadr73kDdQ)
+- 2 [Wikidata](https://mega.nz/folder/5vUBHKTQ#TwpzwSzWhzniK1CeykxUCw)
 
 ## How to use
 
