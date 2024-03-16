@@ -68,106 +68,122 @@ class QueryPlan {
                        const std::vector<std::vector<std::string>>& triple_list) {
         bool debug = false;
 
-        phmap::flat_hash_set<std::string> variable_set;
+        // 变量名 -> 出现此变量的三元组id（可以重复）
+        // 一个变量对应的的 id 的越多，表明在此变量上执行的连接次数就越多
+        phmap::flat_hash_map<std::string, std::vector<size_t>> variable_in_list;
+        phmap::flat_hash_map<std::string, size_t> variable_priority;
+
+        phmap::flat_hash_map<std::string, uint> p_set_size;
+        uint set_size;
+        std::vector<bool> var_flags = {false, false, false};
 
         for (size_t i = 0; i < triple_list.size(); ++i) {
             const auto& triple = triple_list[i];
-            for (int j = 0; j < 3; j++) {
-                if (triple[j][0] == '?')
-                    variable_set.insert(triple[j]);
-            }
-        }
-
-        phmap::flat_hash_map<std::string, std::vector<uint>> variables_search_size;
-
-        std::vector<std::string> variables;
-        for (auto it = variable_set.begin(); it != variable_set.end(); it++) {
-            variables_search_size[*it] = std::vector<uint>();
-            variables.push_back(*it);
-        }
-
-        phmap::flat_hash_map<std::string, std::shared_ptr<Result_Vector>> single_variable_triple_results;
-        phmap::flat_hash_map<std::string, std::vector<size_t>> variable_in_triples;
-        phmap::flat_hash_map<std::string, size_t> single_variable_triple_cnt;
-
-        uint sid, pid, oid;
-        std::string key;
-        std::shared_ptr<Result_Vector> rv;
-        for (size_t i = 0; i < triple_list.size(); ++i) {
-            const auto& triple = triple_list[i];
-            const std::string& s = triple[0];
-            const std::string& p = triple[1];
-            const std::string& o = triple[2];
-            pid = index->predicate2id[p];
+            const auto s = triple[0];
+            const auto p = triple[1];
+            const auto o = triple[2];
 
             phmap::flat_hash_set<std::string> var_in_triplet;
-            if (s[0] == '?') {
-                var_in_triplet.insert(s);
-                variable_in_triples[s].push_back(i);
-            }
 
             if (p[0] == '?') {
                 var_in_triplet.insert(p);
-                variable_in_triples[p].push_back(i);
+                variable_in_list[p].push_back(i);
+                var_flags[1] = true;
+            }
+
+            if (s[0] == '?') {
+                var_in_triplet.insert(s);
+                variable_in_list[s].push_back(i);
+                var_flags[0] = true;
             }
 
             if (o[0] == '?') {
                 var_in_triplet.insert(o);
-                variable_in_triples[o].push_back(i);
-            }
-            for (const auto& var : var_in_triplet) {
-                single_variable_triple_cnt[var] += (var_in_triplet.size() == 1 ? 1 : 0);
+                variable_in_list[o].push_back(i);
+                var_flags[2] = true;
             }
 
-            if (s[0] == '?' && o[0] == '?') {
-                variables_search_size[s].push_back(index->ps_size(pid));
-                variables_search_size[o].push_back(index->po_size(pid));
+            if (!var_flags[1]) {
+                uint pid = index->predicate2id[p];
+                if (var_flags[0] && var_flags[2]) {
+                    set_size = index->get_search_range_from_ps_tree(pid)->result.size();
+                    if (p_set_size[s] != 0) {
+                        if (p_set_size[s] > set_size)
+                            p_set_size[s] = set_size;
+                    } else {
+                        p_set_size[s] = set_size;
+                    }
+                    set_size = index->get_search_range_from_po_tree(pid)->result.size();
+                    if (p_set_size[o] != 0) {
+                        if (p_set_size[o] > set_size)
+                            p_set_size[o] = set_size;
+                    } else {
+                        p_set_size[o] = set_size;
+                    }
+                }
+                if (var_flags[0] && !var_flags[2]) {
+                    uint oid = index->get_entity_id(o);
+                    pid = index->predicate2id[p];
+                    set_size = index->get_by_po(pid, oid)->result.size();
+                    if (p_set_size[s] != 0) {
+                        if (p_set_size[s] > set_size)
+                            p_set_size[s] = set_size;
+                    } else {
+                        p_set_size[s] = set_size;
+                    }
+                }
+                if (!var_flags[0] && var_flags[2]) {
+                    uint sid = index->get_entity_id(s);
+                    pid = index->predicate2id[p];
+                    set_size = index->get_by_ps(pid, sid)->result.size();
+                    if (p_set_size[o] != 0) {
+                        if (p_set_size[o] > set_size)
+                            p_set_size[o] = set_size;
+                    } else {
+                        p_set_size[o] = set_size;
+                    }
+                }
             }
-            if (s[0] == '?' && o[0] != '?') {
-                oid = index->get_entity_id(o);
-                key = p + "_" + o;
-                rv = index->get_by_po(pid, oid);
-                single_variable_triple_results[key] = rv;
-                variables_search_size[s].push_back(rv->result.size());
-            }
-            if (s[0] != '?' && o[0] == '?') {
-                sid = index->get_entity_id(s);
-                key = p + "_" + s;
-                rv = index->get_by_ps(pid, sid);
-                single_variable_triple_results[key] = rv;
-                variables_search_size[o].push_back(rv->result.size());
+
+            // 变量的权重为包含有此变量的单变量三元组数量
+            // 因为单变量的三元组的查询结果一般少于两个或三个变量的三元组
+            for (const auto& var : var_in_triplet) {
+                variable_priority[var] += (var_in_triplet.size() == 1 ? 1 : 0);
             }
         }
 
-        std::sort(variables.begin(), variables.end(), [&](const auto& var1, const auto& var2) {
-            uint var1_avg =
-                *std::min_element(variables_search_size[var1].begin(), variables_search_size[var1].end());
-            uint var2_avg =
-                *std::min_element(variables_search_size[var2].begin(), variables_search_size[var2].end());
-            ;
+        // get the variable_count's key
+        std::vector<std::string> variables(variable_in_list.size());
+        // 获取所有变量名
+        std::transform(variable_in_list.begin(), variable_in_list.end(), variables.begin(),
+                       [](const auto& pair) { return pair.first; });
 
-            if (variable_in_triples[var1].size() != variable_in_triples[var2].size()) {
-                return variable_in_triples[var1].size() > variable_in_triples[var2].size();
+        // 按照变量在三元组列表中出现的次数从大到小排序，如果次数相等，则按照变量的优先级排序
+        // sort 函数会将区间内的元素按照从小到大排序
+        // [&] 表明使用引用的方式访问外部变量
+        // lambda函数返回的是是否第一个参数小于第二个参数
+        std::sort(variables.begin(), variables.end(), [&](const auto& var1, const auto& var2) {
+            if (variable_in_list[var1].size() != variable_in_list[var2].size()) {
+                return variable_in_list[var1].size() > variable_in_list[var2].size();
             }
-            // return single_variable_triple_cnt[var1] > single_variable_triple_cnt[var2];
-            if (single_variable_triple_cnt[var1] != single_variable_triple_cnt[var2]) {
-                return single_variable_triple_cnt[var1] > single_variable_triple_cnt[var2];
+            if (variable_priority[var1] != variable_priority[var2]) {
+                return variable_priority[var1] > variable_priority[var2];
             }
-            return var1_avg > var2_avg;
+            return p_set_size[var1] < p_set_size[var2];
         });
 
+        if (debug) {
+            for (auto it = p_set_size.begin(); it != p_set_size.end(); it++) {
+                std::cout << it->first << " " << it->second << std::endl;
+            }
+
+            std::cout << "var order:" << std::endl;
+            for (size_t i = 0; i < variables.size(); ++i) {
+                std::cout << variables[i] << std::endl;
+            }
+        }
         for (size_t i = 0; i < variables.size(); ++i) {
             _variable2idx[variables[i]] = i;
-        }
-
-        if (true) {
-            for (size_t i = 0; i < variables.size(); ++i) {
-                double var_avg = *std::min_element(variables_search_size[variables[i]].begin(),
-                                                   variables_search_size[variables[i]].end()) *
-                                 variables_search_size[variables[i]].size();
-                std::cout << i << ": " << variables[i] << " " << variable_in_triples[variables[i]].size()
-                          << " " << single_variable_triple_cnt[variables[i]] << " " << var_avg << std::endl;
-            }
         }
 
         size_t n = variables.size();
@@ -259,14 +275,20 @@ class QueryPlan {
             }
             // handle the situation of (?s p o)
             else if (s[0] == '?') {
-                std::shared_ptr<Result_Vector> r = single_variable_triple_results[p + "_" + o];
+                uint oid = index->get_entity_id(o);
+                uint pid = index->predicate2id[p];
+                std::shared_ptr<Result_Vector> r = index->get_by_po(pid, oid);
+                // std::shared_ptr<Result_Vector> r = single_variable_triple_results[p + "_" + o];
                 r->id = range_cnt;
                 prestore_result[var_sid].push_back(r);
                 range_cnt++;
             }
             // handle the situation of (s p ?o)
             else if (o[0] == '?') {
-                std::shared_ptr<Result_Vector> r = single_variable_triple_results[p + "_" + s];
+                uint sid = index->get_entity_id(s);
+                uint pid = index->predicate2id[p];
+                std::shared_ptr<Result_Vector> r = index->get_by_ps(pid, sid);
+                // std::shared_ptr<Result_Vector> r = single_variable_triple_results[p + "_" + s];
                 r->id = range_cnt;
                 prestore_result[var_oid].push_back(r);
                 range_cnt++;
@@ -287,7 +309,7 @@ class QueryPlan {
                     //     _prestore_result[level][i].first, _prestore_result[level][i].second,
                     //     [&](auto& node) { std::cout << index_structure->id2entity[node] << " ";
                     // });
-                    std::cout << "]";
+                    std::cout << "] ";
                 }
 
                 std::cout << std::endl;
@@ -299,7 +321,7 @@ class QueryPlan {
             for (int i = 0; i < int(_query_plan.size()); i++) {
                 for (int j = 0; j < int(_query_plan[i].size()); j++) {
                     Item item = _query_plan[i][j];
-                    std::cout << "[";
+                    std::cout << item.search_range->id << " [";
                     std::cout << item.search_range->result.size();
                     // std::for_each(item.search_range.first, item.search_range.second,
                     //               [&](auto& node) { std::cout << index_structure->id2entity[node] << "

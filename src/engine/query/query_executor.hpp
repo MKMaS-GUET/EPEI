@@ -143,9 +143,9 @@ class QueryExecutor {
         // _stat.level 相当于 _query_plan 的索引，即变量的优先级顺序 id
         pre_join();
 
-        for (int i = 0; i <= _stat.plan.size() - 1; i++) {
-            join_cnt[i] = 0;
-        }
+        // for (int i = 0; i <= _stat.plan.size() - 1; i++) {
+        //     join_cnt[i] = 0;
+        // }
 
         for (;;) {
             // 只有在 candidate_result 全部处理完和当前level的交集为空，at_end才会为 true
@@ -185,9 +185,9 @@ class QueryExecutor {
 
         _query_end_time = std::chrono::high_resolution_clock::now();
 
-        for (int i = 0; i <= _stat.plan.size() - 1; i++) {
-            std::cout << join_cnt[i] << std::endl;
-        }
+        // for (int i = 0; i <= _stat.plan.size() - 1; i++) {
+        //     std::cout << join_cnt[i] << std::endl;
+        // }
 
         // sleep(2);
     }
