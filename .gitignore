@@ -135,5 +135,6 @@ graph_info.json
 .vscode/
 build/
 bin/
+lib/
 dataset/
 # End of https://www.toptal.com/developers/gitignore/api/cmake,clion,conan
