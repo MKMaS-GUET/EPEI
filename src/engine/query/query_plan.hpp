@@ -60,8 +60,8 @@ class QueryPlan {
               const std::vector<std::vector<std::string>>& triple_list,
               size_t limit_)
         : limit(limit_) {
-        // generate_test(index, triple_list);
-        generate(index, triple_list);
+        generate_test(index, triple_list);
+        // generate(index, triple_list);
     }
 
     void generate_test(const std::shared_ptr<Index>& index,
@@ -385,6 +385,7 @@ class QueryPlan {
         // variables = {"?Y", "?Z", "?X"}; // 4596.390094
         // variables = {"?Z", "?X", "?Y"}; // 6012.844853
         // variables = {"?Z", "?Y", "?X"}; // 4676.747373
+        // variables = {"?v2", "?v1", "?v0", "?v3"};
 
         if (debug) {
             std::cout << "var order:" << std::endl;
@@ -518,7 +519,7 @@ class QueryPlan {
                     //     _prestore_result[level][i].first, _prestore_result[level][i].second,
                     //     [&](auto& node) { std::cout << index_structure->id2entity[node] << " ";
                     // });
-                    std::cout << "]";
+                    std::cout << "] ";
                 }
 
                 std::cout << std::endl;
@@ -530,7 +531,7 @@ class QueryPlan {
             for (int i = 0; i < int(_query_plan.size()); i++) {
                 for (int j = 0; j < int(_query_plan[i].size()); j++) {
                     Item item = _query_plan[i][j];
-                    std::cout << "[";
+                    std::cout << item.search_range->id << " [";
                     std::cout << item.search_range->result.size();
                     // std::for_each(item.search_range.first, item.search_range.second,
                     //               [&](auto& node) { std::cout << index_structure->id2entity[node] << "

@@ -30,6 +30,7 @@ void leapfrog_join(Result_Vector_List& pair_begin_end, std::vector<uint>& result
     //  max 是所有指针指向位置的最大值，初始的最大值就是对列表排序后，最后一个列表的第一个值
     size_t max = pair_begin_end.get_current_val_of_range(pair_begin_end.size() - 1);
 
+    // 当前迭代器的 id
     size_t idx = 0;
 
     // double tree_seek_time = 0;
@@ -59,7 +60,7 @@ void leapfrog_join(Result_Vector_List& pair_begin_end, std::vector<uint>& result
             pair_begin_end.next_val(idx);
             // We shall find a value greater or equal than the current max
         } else {
-            // 在前两个参数的范围内找出大于等于第三个参数的第一个值，返回的是此值的指针（迭代器）
+            // 将当前迭代器指向的位置变为第一个大于 max 的值的位置
             pair_begin_end.seek(idx, max);
         }
 

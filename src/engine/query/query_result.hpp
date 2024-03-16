@@ -75,19 +75,20 @@ int query_result(std::vector<std::vector<uint>>& result,
         for (auto it = result.begin(); it != last; ++it) {
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
-                printf("%s ", index->id2entity[item[idx]]->c_str());
+                std::cout << *index->id2entity[item[idx]] << " ";
+                // printf("%s ", index->id2entity[item[idx]]->c_str());
             }
             cnt++;
-            printf("\n");
+            std::cout << "\n";
         }
     } else {
         cnt = result.size();
         for (auto it = result.begin(); it != last; ++it) {
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
-                printf("%s ", index->id2entity[item[idx]]->c_str());
+                std::cout << *index->id2entity[item[idx]] << " ";
             }
-            printf("\n");
+            std::cout << "\n";
         }
     }
 
@@ -98,7 +99,7 @@ int query_result(std::vector<std::vector<uint>>& result,
                  const std::shared_ptr<Index>& index,
                  const std::shared_ptr<QueryPlan>& query_plan,
                  const std::shared_ptr<SPARQLParser>& parser,
-                 FILE* output_file) {
+                 std::ofstream& output_file) {
     auto last = result.end();
     const auto& modifier = parser->project_modifier();
     // 获取每一个变量的id（优先级顺序）
@@ -117,21 +118,19 @@ int query_result(std::vector<std::vector<uint>>& result,
         for (auto it = result.begin(); it != last; ++it) {
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
-                // index->id2entity[item[idx]].c_str();
-                fprintf(output_file, "%s ", index->id2entity[item[idx]]->c_str());
+                output_file << *index->id2entity[item[idx]] << " ";
             }
             cnt++;
-            fprintf(output_file, "\n");
+            output_file << "\n";
         }
     } else {
         cnt = result.size();
         for (auto it = result.begin(); it != last; ++it) {
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
-                // index->id2entity[item[idx]].c_str();
-                fprintf(output_file, "%s ", index->id2entity[item[idx]]->c_str());
+                output_file << *index->id2entity[item[idx]] << " ";
             }
-            fprintf(output_file, "\n");
+            output_file << "\n";
         }
     }
 

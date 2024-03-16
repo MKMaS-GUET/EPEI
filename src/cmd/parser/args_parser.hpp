@@ -184,19 +184,20 @@ class ArgsParser {
         //     std::cerr << "epei: error: the following argument is required: [-db DATABASE]" << std::endl;
         //     exit(1);
         // }
-        // _arguments[_arg_name] = args.count("-db") ? args.at("-db") : args.at("--database");
-        // if (args.count("-f"))
-        //     _arguments[_arg_file] = args.at("-f");
-        // else if (args.count("--file"))
-        //     _arguments[_arg_file] = args.at("--file");
-        // else
-        //     _arguments[_arg_file] = "";
+        if (args.count("-db"))
+            _arguments[_arg_name] = args.count("-db") ? args.at("-db") : args.at("--database");
+        if (args.count("-f"))
+            _arguments[_arg_file] = args.at("-f");
+        else if (args.count("--file"))
+            _arguments[_arg_file] = args.at("--file");
+        else
+            _arguments[_arg_file] = "";
 
-        // size_t default_thread_num = std::thread::hardware_concurrency();
-        // if (args.count("-t") && default_thread_num >= std::stoull(args.at("-t")))
-        //     _arguments[_arg_thread_num] = args.at("-t");
-        // else
-        //     _arguments[_arg_thread_num] = std::to_string(default_thread_num);
+        size_t default_thread_num = std::thread::hardware_concurrency();
+        if (args.count("-t") && default_thread_num >= std::stoull(args.at("-t")))
+            _arguments[_arg_thread_num] = args.at("-t");
+        else
+            _arguments[_arg_thread_num] = std::to_string(default_thread_num);
     }
 
     void server(const std::unordered_map<std::string, std::string>& args) {

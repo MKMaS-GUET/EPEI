@@ -23,6 +23,23 @@ class Result_Vector_List {
 
     phmap::flat_hash_map<int, std::vector<uint>::iterator> vector_current_pos;
 
+    std::vector<uint>::iterator bin_searech(int i, uint val) {
+        auto left = vector_current_pos[i];
+        auto right = result_vectors[i]->result.end();
+
+        while (left <= right) {
+            auto mid = left + (right - left) / 2;
+
+            if (*mid == val) {
+                return mid;  // 找到目标，返回索引
+            } else if (*mid < val) {
+                left = mid + 1;  // 目标在右半部分
+            } else {
+                right = mid - 1;  // 目标在左半部分
+            }
+        }
+    }
+
    public:
     void clear() {
         result_vectors.clear();

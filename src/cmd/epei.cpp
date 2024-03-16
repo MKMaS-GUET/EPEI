@@ -13,10 +13,14 @@ void build(const std::unordered_map<std::string, std::string>& arguments) {
 }
 
 void query(const std::unordered_map<std::string, std::string>& arguments) {
-    // std::string db_name = arguments.at("name");
-    // std::string sparql_file = arguments.at("file");
+    std::string db_name;
+    std::string sparql_file;
+    if (arguments.count("name"))
+        db_name = arguments.at("name");
+    if (arguments.count("name"))
+        sparql_file = arguments.at("file");
 
-    epei::Engine::Query("name", "file");
+    epei::Engine::Query(db_name, sparql_file);
 }
 
 void server(const std::unordered_map<std::string, std::string>& arguments) {

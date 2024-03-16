@@ -42,21 +42,24 @@ class epei::Engine::Impl {
     void execute_sparql(std::vector<std::string> sparqls,
                         std::shared_ptr<Index> index,
                         std::string file_name) {
-        // index->load_data(entities);
-        FILE* output_file = NULL;
+        std::ofstream output_file;
+        std::ios::sync_with_stdio(false);
         if (file_name != "")
-            output_file = fopen(file_name.c_str(), "w");
+            output_file = std::ofstream(file_name);
 
         for (long unsigned int i = 0; i < sparqls.size(); i++) {
             std::string sparql = sparqls[i];
 
             if (sparqls.size() > 1) {
-                if (output_file == NULL)
+                if (file_name == "")
                     printf("%ld ------------------------------------------------------------------\n", i + 1);
-                else
-                    fprintf(output_file,
-                            "%ld ------------------------------------------------------------------\n",
-                            i + 1);
+                else {
+                    output_file << (i + 1)
+                                << " ------------------------------------------------------------------"
+                                << std::endl;
+
+                    std::cout << "finish " << i + 1 << " queries" << std::endl;
+                }
             }
 
             auto start = std::chrono::high_resolution_clock::now();
@@ -76,7 +79,7 @@ class epei::Engine::Impl {
 
             auto mapping_start = std::chrono::high_resolution_clock::now();
             int cnt = 0;
-            if (output_file == NULL)
+            if (file_name == "")
                 cnt = query_result(executor->result(), index, query_plan, parser);
             else
                 cnt = query_result(executor->result(), index, query_plan, parser, output_file);
@@ -88,20 +91,18 @@ class epei::Engine::Impl {
 
             std::chrono::duration<double, std::milli> plan_time = plan_end - start;
 
-            if (output_file == NULL) {
-                printf("%d result(s).\n", cnt);
-                printf("generate plan takes %lf ms.\n", plan_time.count());
-                printf("execute takes %lf ms.\n", executor->duration());
-                printf("output result takes %lf ms.\n", mapping_diff.count());
-
-                printf("query time cost %lf ms.\n", diff.count());
+            if (file_name == "") {
+                std::cout << cnt << " result(s).\n";
+                std::cout << "generate plan takes " << plan_time.count() << " ms.\n";
+                std::cout << "execute takes " << executor->duration() << " ms.\n";
+                std::cout << "output result takes " << mapping_diff.count() << " ms.\n";
+                std::cout << "query cost " << diff.count() << " ms." << std::endl;
             } else {
-                fprintf(output_file, "%d result(s).\n", cnt);
-                fprintf(output_file, "generate plan takes %lf ms.\n", plan_time.count());
-                fprintf(output_file, "execute takes %lf ms.\n", executor->duration());
-                fprintf(output_file, "output result takes %lf ms.\n", mapping_diff.count());
-
-                fprintf(output_file, "query time cost %lf ms.\n", diff.count());
+                output_file << cnt << "  result(s).\n";
+                output_file << "generate plan takes " << plan_time.count() << " ms.\n";
+                output_file << "execute takes " << executor->duration() << " ms.\n";
+                output_file << "output result takes " << mapping_diff.count() << " ms.\n";
+                output_file << "query cost " << diff.count() << " ms." << std::endl;
             }
 
             // printf("%s", sparql.c_str());
@@ -109,103 +110,121 @@ class epei::Engine::Impl {
     }
 
     void query(const std::string& name, const std::string& file) {
-        std::string db_help = "select [database name]";
-        std::string query_help =
-            "Usage: sparql [options]\n"
-            "\n"
-            "Description:\n"
-            "  Run a SPARQL query.\n"
-            "\n\n"
-            "Usage: file [options] [arguments]\n"
-            "\n"
-            "Description:\n"
-            "  Run SPARQL queries from a file and output the results to a file.\n"
-            "\n"
-            "Options:\n"
-            "  -i, --input <file>    Specify the input file containing SPARQL queries.\n"
-            "  -o, --output [file]   Specify the output file for the query results.\n";
-
-        std::string cmd;
-        std::string db;
-        std::shared_ptr<Index> index;
-        list_db();
-        while (true) {
-            std::cout << ">";
-
-            std::cin >> cmd;
-            if (cmd == "select") {
-                std::cin >> db;
-                index = std::make_shared<Index>(db);
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-                while (true) {
-                    std::cout << ">";
-                    std::string sparql;
-                    std::string line;
-                    std::string word;
-                    std::getline(std::cin, line);
-                    std::istringstream iss(line);
-                    bool cmd_flag = true;
-                    while (iss >> word) {
-                        if (cmd_flag) {
-                            cmd = word;
-                            cmd_flag = false;
-                        } else {
-                            sparql += word + " ";
-                        }
-                    }
-
-                    if (sparql.size() > 1)
-                        sparql = sparql.substr(0, sparql.size() - 1);
-
-                    std::vector<std::string> sparqls;
-                    if (cmd == "sparql") {
-                        sparqls.push_back(sparql);
-                        execute_sparql(sparqls, index, "");
-                    } else if (cmd == "file") {
-                        std::string rest_cmd = sparql;
-                        std::istringstream iss(sparql);
-                        std::string token;
-
-                        std::string input_file, output_file = "";
-                        while (iss >> token) {
-                            if (token == "-i" || token == "--input") {
-                                iss >> input_file;
-                            } else if (token == "-o" || token == "--output") {
-                                iss >> output_file;
-                            }
-                        }
-
-                        if (input_file != "") {
-                            std::ifstream in(input_file, std::ifstream::in);
-                            if (in.is_open()) {
-                                std::string line;
-                                while (std::getline(in, sparql)) {
-                                    sparqls.push_back(sparql);
-                                }
-                                in.close();
-                            }
-                            execute_sparql(sparqls, index, output_file);
-                        }
-                    } else if (cmd == "help") {
-                        std::cout << query_help << std::endl;
-                    } else if (cmd == "change") {
-                        index->close();
-                        list_db();
-                        break;
-                    } else if (cmd == "exit") {
-                        exit(0);
-                    } else {
-                        std::cout << query_help << std::endl;
-                    }
+        if (name != "" and file != "") {
+            std::shared_ptr<Index> index = std::make_shared<Index>(name);
+            std::ifstream in(file, std::ifstream::in);
+            std::vector<std::string> sparqls;
+            if (in.is_open()) {
+                std::string line;
+                std::string sparql;
+                while (std::getline(in, sparql)) {
+                    sparqls.push_back(sparql);
                 }
+                in.close();
+            }
+            execute_sparql(sparqls, index, "");
+            exit(0);
+        } else {
+            std::string db_help = "select [database name]";
+            std::string query_help =
+                "Usage: sparql [options]\n"
+                "\n"
+                "Description:\n"
+                "  Run a SPARQL query.\n"
+                "\n\n"
+                "Usage: file [options] [arguments]\n"
+                "\n"
+                "Description:\n"
+                "  Run SPARQL queries from a file and output the results to a file.\n"
+                "\n"
+                "Options:\n"
+                "  -i, --input <file>    Specify the input file containing SPARQL queries.\n"
+                "  -o, --output [file]   Specify the output file for the query results.\n";
 
-            } else if (cmd == "help") {
-                std::cout << db_help << std::endl;
-            } else if (cmd == "exit") {
-                exit(0);
-            } else {
-                list_db();
+            std::string cmd;
+            std::string db;
+            std::shared_ptr<Index> index;
+            list_db();
+            while (true) {
+                std::cout << ">";
+
+                std::cin >> cmd;
+                if (cmd == "select") {
+                    std::cin >> db;
+                    index = std::make_shared<Index>(db);
+                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+                    while (true) {
+                        std::cout << ">";
+                        std::string sparql;
+                        std::string line;
+                        std::string word;
+                        std::getline(std::cin, line);
+                        std::istringstream iss(line);
+                        bool cmd_flag = true;
+                        while (iss >> word) {
+                            if (cmd_flag) {
+                                cmd = word;
+                                cmd_flag = false;
+                            } else {
+                                sparql += word + " ";
+                            }
+                        }
+
+                        if (sparql.size() > 1)
+                            sparql = sparql.substr(0, sparql.size() - 1);
+
+                        std::vector<std::string> sparqls;
+                        if (cmd == "sparql") {
+                            sparqls.push_back(sparql);
+                            execute_sparql(sparqls, index, "");
+                        } else if (cmd == "file") {
+                            std::string rest_cmd = sparql;
+                            std::istringstream iss(sparql);
+                            std::string token;
+
+                            std::string input_file, output_file = "";
+                            while (iss >> token) {
+                                if (token == "-i" || token == "--input") {
+                                    iss >> input_file;
+                                } else if (token == "-o" || token == "--output") {
+                                    iss >> output_file;
+                                }
+                            }
+
+                            if (input_file != "") {
+                                std::ifstream in(input_file, std::ifstream::in);
+                                if (in.is_open()) {
+                                    std::string line;
+                                    while (std::getline(in, sparql)) {
+                                        sparqls.push_back(sparql);
+                                    }
+                                    in.close();
+                                }
+                                execute_sparql(sparqls, index, output_file);
+                            }
+                        } else if (cmd == "help") {
+                            std::cout << query_help << std::endl;
+                        } else if (cmd == "change") {
+                            index->close();
+                            list_db();
+                            break;
+                        } else if (cmd == "exit") {
+                            exit(0);
+                        } else {
+                            std::cout << query_help << std::endl;
+                        }
+
+                        // sleep(1);
+                    }
+
+                } else if (cmd == "help") {
+                    std::cout << db_help << std::endl;
+                } else if (cmd == "exit") {
+                    exit(0);
+                } else {
+                    list_db();
+                }
             }
         }
 
@@ -231,8 +250,8 @@ class epei::Engine::Impl {
             }
         }
 
-        std::cout << "\nExamples:" << std::endl;
-        std::cout << "  select database_name" << std::endl;
+        std::cout << "\nExample:" << std::endl;
+        std::cout << "  select database_name\n" << std::endl;
     }
 
     // void get_entity(phmap::flat_hash_set<std::string>& entities, std::string sparql) {

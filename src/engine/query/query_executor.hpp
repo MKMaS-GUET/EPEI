@@ -79,7 +79,8 @@ struct Stat {
 
 class QueryExecutor {
    public:
-    int join_cnt = 0;
+    int none_id = 0;
+    phmap::flat_hash_map<int, int> join_cnt;
     QueryExecutor(const std::shared_ptr<Index>& p_index, const std::shared_ptr<QueryPlan>& p_query_plan)
         : _stat(p_query_plan->plan()),
           _p_index(p_index),
@@ -142,6 +143,10 @@ class QueryExecutor {
         // _stat.level 相当于 _query_plan 的索引，即变量的优先级顺序 id
         pre_join();
 
+        for (int i = 0; i <= _stat.plan.size() - 1; i++) {
+            join_cnt[i] = 0;
+        }
+
         for (;;) {
             // 只有在 candidate_result 全部处理完和当前level的交集为空，at_end才会为 true
             if (_stat.at_end) {
@@ -179,6 +184,10 @@ class QueryExecutor {
         }
 
         _query_end_time = std::chrono::high_resolution_clock::now();
+
+        for (int i = 0; i <= _stat.plan.size() - 1; i++) {
+            std::cout << join_cnt[i] << std::endl;
+        }
 
         // sleep(2);
     }
@@ -227,6 +236,7 @@ class QueryExecutor {
 
     void down(Stat& stat) {
         ++stat.level;
+        // sleep(2);
 
         if (debug) {
             std::cout << "---------------------------------" << std::endl;
@@ -313,6 +323,8 @@ class QueryExecutor {
         // 3.双变量三元组的非 none 类型的 item
         // 要把这三种查询结果一起进行交集操作
 
+        join_cnt[stat.level] += 1;
+
         const auto& item_none_type_indices = _p_query_plan->none_type_indices[stat.level];
         const auto& item_other_type_indices = _p_query_plan->other_type_indices[stat.level];
 
@@ -365,6 +377,7 @@ class QueryExecutor {
                     Result_Vector_list.add_range(stat.plan[stat.level][idx].search_range);
                 }
             }
+
             stat.candidate_result[stat.level] = leapfrog_join(Result_Vector_list);
         }
         if (join_case == 1) {
@@ -373,18 +386,26 @@ class QueryExecutor {
         }
         if (join_case > 1) {
             // stat.candidate_result[stat.level] = leapfrog_join(Result_Vector_list);
+            stat.candidate_result[stat.level] = leapfrog_join(Result_Vector_list);
 
-            if (stat.level != int(_stat.plan.size() - 2)) {
-                stat.candidate_result[stat.level] = leapfrog_join(Result_Vector_list);
-            } else {
-                // std::cout << join_case << std::endl;
-                std::shared_ptr<Result_Vector> range = Result_Vector_list.shortest();
-                stat.candidate_result[stat.level]->reserve(range->result.size());
+            // std::shared_ptr<Result_Vector> range = Result_Vector_list.shortest();
+            // stat.candidate_result[stat.level]->reserve(range->result.size());
 
-                for (auto it = range->result.begin(); it != range->result.end(); it++) {
-                    stat.candidate_result[stat.level]->emplace_back(std::move(*it));
-                }
-            }
+            // for (auto it = range->result.begin(); it != range->result.end(); it++) {
+            //     stat.candidate_result[stat.level]->emplace_back(std::move(*it));
+            // }
+
+            // if (stat.level != int(_stat.plan.size() - 2)) {
+            //     stat.candidate_result[stat.level] = leapfrog_join(Result_Vector_list);
+            // } else {
+            //     // std::cout << join_case << std::endl;
+            //     std::shared_ptr<Result_Vector> range = Result_Vector_list.shortest();
+            //     stat.candidate_result[stat.level]->reserve(range->result.size());
+
+            //     for (auto it = range->result.begin(); it != range->result.end(); it++) {
+            //         stat.candidate_result[stat.level]->emplace_back(std::move(*it));
+            //     }
+            // }
         }
 
         // 变量的交集为空
@@ -465,6 +486,8 @@ class QueryExecutor {
                     // it 是第一个比 search_code 大的 ps 节点，就是第一个谓词是 p 的节点
                     // end 是第一个比 search_code+1 大的 ps 节点，就是第一个谓词不是 p 的节点
                     other_item.search_range = _p_index->get_by_po(item.search_code, entity);
+                    none_id++;
+                    other_item.search_range->id = none_id;
                     if (other_item.search_range->result.size() == 0) {
                         match = false;
                     }
@@ -490,6 +513,8 @@ class QueryExecutor {
 
                     std::shared_ptr<Result_Vector> rv = _p_index->get_by_ps(item.search_code, entity);
                     other_item.search_range = rv;
+                    none_id++;
+                    other_item.search_range->id = none_id;
                     // std::cout << other_item.search_range->size() << std::endl;
                     if (other_item.search_range->result.size() == 0) {
                         match = false;
