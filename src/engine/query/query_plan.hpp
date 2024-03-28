@@ -60,8 +60,8 @@ class QueryPlan {
               const std::vector<std::vector<std::string>>& triple_list,
               size_t limit_)
         : limit(limit_) {
-        generate_test(index, triple_list);
-        // generate(index, triple_list);
+        // generate_test(index, triple_list);
+        generate(index, triple_list);
     }
 
     void generate_test(const std::shared_ptr<Index>& index,
@@ -345,7 +345,7 @@ class QueryPlan {
 
     void generate(const std::shared_ptr<Index>& index,
                   const std::vector<std::vector<std::string>>& triple_list) {
-        bool debug = true;
+        bool debug = false;
 
         // 变量名 -> 出现此变量的三元组id（可以重复）
         // 一个变量对应的的 id 的越多，表明在此变量上执行的连接次数就越多
