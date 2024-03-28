@@ -6,6 +6,11 @@
 #include <unistd.h>
 #include <string>
 
+union FloatInt {
+    float f;
+    unsigned int i;
+};
+
 class Virtual_Memory {
     uint* _vm;
     int _fd;

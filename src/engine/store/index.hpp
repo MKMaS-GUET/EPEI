@@ -115,23 +115,38 @@ class Index {
     }
 
     bool pre_load_tree() {
-        uint offset;
-        uint size;
+        uint s_array_offset;
+        uint s_array_size;
+        uint o_array_offset;
+        uint o_array_size;
         std::shared_ptr<Result_Vector> rv;
+
+        FloatInt fi;
+        // for (uint pid = 1; pid <= _predicate_cnt; pid++) {
+        //     fi.i = _predicate_index[(pid - 1) * 4 + 1];
+        //     std::cout << pid << " " << fi.f << " ";
+        //     fi.i = _predicate_index[(pid - 1) * 4 + 3];
+        //     std::cout << fi.f << std::endl;
+        // }
+
         for (uint pid = 1; pid <= _predicate_cnt; pid++) {
-            offset = _predicate_index[(pid - 1) * 4];
-            size = _predicate_index[(pid - 1) * 4 + 1];
-            rv = std::make_shared<Result_Vector>(size);
-            for (uint i = 0; i < size; i++) {
-                rv->result[i] = _predicate_index_arrays[offset + i];
+            s_array_offset = _predicate_index[(pid - 1) * 4];
+            o_array_offset = _predicate_index[(pid - 1) * 4 + 2];
+            s_array_size = o_array_offset - s_array_offset;
+            if (pid != _predicate_cnt)
+                o_array_size = _predicate_index[pid * 4] - o_array_offset;
+            else
+                o_array_size = _predicate_index_arrays_file_size / 4 - o_array_offset;
+
+            rv = std::make_shared<Result_Vector>(s_array_size);
+            for (uint i = 0; i < s_array_size; i++) {
+                rv->result[i] = _predicate_index_arrays[s_array_offset + i];
             }
             ps_sets.push_back(rv);
 
-            offset = _predicate_index[(pid - 1) * 4 + 2];
-            size = _predicate_index[(pid - 1) * 4 + 3];
-            rv = std::make_shared<Result_Vector>(size);
-            for (uint i = 0; i < size; i++) {
-                rv->result[i] = _predicate_index_arrays[offset + i];
+            rv = std::make_shared<Result_Vector>(o_array_size);
+            for (uint i = 0; i < o_array_size; i++) {
+                rv->result[i] = _predicate_index_arrays[o_array_offset + i];
             }
             po_sets.push_back(rv);
         }
