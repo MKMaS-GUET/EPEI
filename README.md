@@ -1,6 +1,6 @@
 # PPFI
 
-An RDF Retrieval System Based on **E**fficient **P**redicate-**E**ntity **I**ndexing
+An RDF Retrival System with **P**ath-Based **P**lan and **F**ast **I**ndexing
 
 A Vue front-end is avaiable  [here](https://github.com/LiuYipeng42/RDF_Retrieval_System).
 
