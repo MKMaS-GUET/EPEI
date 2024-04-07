@@ -9,7 +9,7 @@ query_file_suffix=          # the suffix of the query file (e.g. `.in`, `.sql`, 
 database_name=wiki              # database name
 
 # binary executable for query
-EXE=./epei
+EXE=./pppe
 
 # set output folder, {result_output_folder}/{query_file_type}{query_file_num}{output_file_suffix}
 result_output_folder=./result/wiki       # the path of the output file folder

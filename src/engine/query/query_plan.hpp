@@ -1,30 +1,23 @@
-/*
- * @FileName   : gen_plan.hpp
- * @CreateAt   : 2023/6/16
- * @Author     : Inno Fang
- * @Email      : innofang@yeah.net
- * @Description:
- */
-
 #ifndef QUERY_PLAN_HPP
 #define QUERY_PLAN_HPP
 
+#include <parallel_hashmap/phmap.h>
+#include <climits>
 #include <numeric>  // 包含 accumulate 函数
 #include <string>
 #include <vector>
 
-#include <parallel_hashmap/phmap.h>
-
 #include "../store/index.hpp"
-
+#include "leapfrog_join.hpp"
 #include "result_vector_list.hpp"
+
+using AdjacencyList = phmap::flat_hash_map<std::string, std::vector<std::pair<std::string, uint>>>;
 
 class QueryPlan {
    public:
     // 一对迭代器
     using pair_begin_end = std::pair<std::vector<uint>::iterator, std::vector<uint>::iterator>;
 
-   public:
     struct Item {
         enum Type_T { PS, PO, None };
         Type_T search_type;           // mark the current search type
@@ -34,7 +27,7 @@ class QueryPlan {
         // 一对迭代器，第一个是起始位置，第二个是结束位置
         // std::pair<Entity_Tree_Iterator, Entity_Tree_Iterator>
         //     search_range;  // the range of current search
-        std::shared_ptr<Result_Vector> search_range;
+        std::shared_ptr<ResultVector> search_range;
 
         Item() = default;
 
@@ -55,363 +48,315 @@ class QueryPlan {
         }
     };
 
-   public:
     QueryPlan(const std::shared_ptr<Index>& index,
               const std::vector<std::vector<std::string>>& triple_list,
               size_t limit_)
         : limit(limit_) {
-        // generate_test(index, triple_list);
         generate(index, triple_list);
     }
 
-    void generate_test(const std::shared_ptr<Index>& index,
-                       const std::vector<std::vector<std::string>>& triple_list) {
-        bool debug = false;
+    void DFS(const AdjacencyList& graph,
+             std::string vertex,
+             phmap::flat_hash_map<std::string, bool>& visited,
+             AdjacencyList& tree,
+             std::vector<std::string>& currentPath,
+             std::vector<std::vector<std::string>>& allPaths) {
+        currentPath.push_back(vertex);  // Add the current vertex to the path
 
-        // 变量名 -> 出现此变量的三元组id（可以重复）
-        // 一个变量对应的的 id 的越多，表明在此变量上执行的连接次数就越多
-        phmap::flat_hash_map<std::string, std::vector<size_t>> variable_in_list;
-        phmap::flat_hash_map<std::string, size_t> variable_priority;
-
-        phmap::flat_hash_map<std::string, uint> p_set_size;
-        uint set_size;
-        std::vector<bool> var_flags = {false, false, false};
-
-        for (size_t i = 0; i < triple_list.size(); ++i) {
-            const auto& triple = triple_list[i];
-            const auto s = triple[0];
-            const auto p = triple[1];
-            const auto o = triple[2];
-
-            phmap::flat_hash_set<std::string> var_in_triplet;
-
-            if (p[0] == '?') {
-                var_in_triplet.insert(p);
-                variable_in_list[p].push_back(i);
-                var_flags[1] = true;
+        // Check if it's a leaf node in the spanning tree (no adjacent vertices)
+        // if (graph.at(vertex).size() == 1 || visited[vertex] == true) {
+        //     allPaths.push_back(currentPath);  // Save the current path if it's a leaf
+        // }
+        bool all_visited = true;
+        for (const auto& edge : graph.at(vertex)) {
+            if (!visited[edge.first]) {
+                all_visited = false;
             }
+        }
+        if (all_visited)
+            allPaths.push_back(currentPath);
+        visited[vertex] = true;
 
-            if (s[0] == '?') {
-                var_in_triplet.insert(s);
-                variable_in_list[s].push_back(i);
-                var_flags[0] = true;
-            }
-
-            if (o[0] == '?') {
-                var_in_triplet.insert(o);
-                variable_in_list[o].push_back(i);
-                var_flags[2] = true;
-            }
-
-            if (!var_flags[1]) {
-                uint pid = index->predicate2id[p];
-                if (var_flags[0] && var_flags[2]) {
-                    set_size = index->get_search_range_from_ps_tree(pid)->result.size();
-                    if (p_set_size[s] != 0) {
-                        if (p_set_size[s] > set_size)
-                            p_set_size[s] = set_size;
-                    } else {
-                        p_set_size[s] = set_size;
-                    }
-                    set_size = index->get_search_range_from_po_tree(pid)->result.size();
-                    if (p_set_size[o] != 0) {
-                        if (p_set_size[o] > set_size)
-                            p_set_size[o] = set_size;
-                    } else {
-                        p_set_size[o] = set_size;
-                    }
-                }
-                if (var_flags[0] && !var_flags[2]) {
-                    uint oid = index->get_entity_id(o);
-                    pid = index->predicate2id[p];
-                    set_size = index->get_by_po(pid, oid)->result.size();
-                    if (p_set_size[s] != 0) {
-                        if (p_set_size[s] > set_size)
-                            p_set_size[s] = set_size;
-                    } else {
-                        p_set_size[s] = set_size;
-                    }
-                }
-                if (!var_flags[0] && var_flags[2]) {
-                    uint sid = index->get_entity_id(s);
-                    pid = index->predicate2id[p];
-                    set_size = index->get_by_ps(pid, sid)->result.size();
-                    if (p_set_size[o] != 0) {
-                        if (p_set_size[o] > set_size)
-                            p_set_size[o] = set_size;
-                    } else {
-                        p_set_size[o] = set_size;
-                    }
-                }
-            }
-
-            // 变量的权重为包含有此变量的单变量三元组数量
-            // 因为单变量的三元组的查询结果一般少于两个或三个变量的三元组
-            for (const auto& var : var_in_triplet) {
-                variable_priority[var] += (var_in_triplet.size() == 1 ? 1 : 0);
+        // Explore the adjacent vertices
+        for (const auto& edge : graph.at(vertex)) {
+            std::string adjVertex = edge.first;
+            if (!visited[adjVertex]) {
+                tree[vertex].emplace_back(adjVertex, edge.second);            // Add edge to the spanning tree
+                DFS(graph, adjVertex, visited, tree, currentPath, allPaths);  // Continue DFS
             }
         }
 
-        // get the variable_count's key
-        std::vector<std::string> variables(variable_in_list.size());
-        // 获取所有变量名
-        std::transform(variable_in_list.begin(), variable_in_list.end(), variables.begin(),
-                       [](const auto& pair) { return pair.first; });
+        // Backtrack: remove the current vertex from the path
+        currentPath.pop_back();
+    }
 
-        // 按照变量在三元组列表中出现的次数从大到小排序，如果次数相等，则按照变量的优先级排序
-        // sort 函数会将区间内的元素按照从小到大排序
-        // [&] 表明使用引用的方式访问外部变量
-        // lambda函数返回的是是否第一个参数小于第二个参数
-        std::sort(variables.begin(), variables.end(), [&](const auto& var1, const auto& var2) {
-            if (variable_in_list[var1].size() != variable_in_list[var2].size()) {
-                return variable_in_list[var1].size() > variable_in_list[var2].size();
-            }
-            if (variable_priority[var1] != variable_priority[var2]) {
-                return variable_priority[var1] > variable_priority[var2];
-            }
-            return p_set_size[var1] < p_set_size[var2];
-        });
+    std::vector<std::vector<std::string>> findAllPathsInGraph(const AdjacencyList& graph,
+                                                              const std::string& root) {
+        phmap::flat_hash_map<std::string, bool> visited;  // Track visited vertices
+        AdjacencyList tree;                               // The resulting spanning tree
+        std::vector<std::string> currentPath;             // Current path from the root to the current vertex
+        std::vector<std::vector<std::string>> allPaths;   // All paths from the root to the leaves
 
-        if (debug) {
-            for (auto it = p_set_size.begin(); it != p_set_size.end(); it++) {
-                std::cout << it->first << " " << it->second << std::endl;
-            }
-
-            std::cout << "var order:" << std::endl;
-            for (size_t i = 0; i < variables.size(); ++i) {
-                std::cout << variables[i] << std::endl;
-            }
+        // Initialize visited map
+        for (const auto& pair : graph) {
+            visited[pair.first] = false;
         }
-        for (size_t i = 0; i < variables.size(); ++i) {
-            _variable2idx[variables[i]] = i;
-        }
+        // visited[root] = true;
 
-        size_t n = variables.size();
-        _query_plan.resize(n);
-        prestore_result.resize(n);
-        other_type_indices.resize(n);
-        none_type_indices.resize(n);
+        // Perform DFS to fill the spanning tree and find all paths
+        DFS(graph, root, visited, tree, currentPath, allPaths);
 
-        int range_cnt = 0;
-
-        for (const auto& triple : triple_list) {
-            const std::string& s = triple[0];
-            const std::string& p = triple[1];
-            const std::string& o = triple[2];
-
-            if (debug) {
-                std::cout << "---------------------------------" << std::endl;
-                std::cout << "(" << s << ", " << p << ", " << o << ") plan: " << std::endl;
-            }
-
-            if (p[0] == '?') {
-                // skip
-                // TODO: handle the situation of (s ?p o), (s ?p ?o), (?s ?p o), (?s ?p ?o)
-                continue;
-            }
-
-            // handle the situation of (?s p ?o)
-            uint64_t var_sid = _variable2idx[s];
-            uint64_t var_oid = _variable2idx[o];
-            if (s[0] == '?' && o[0] == '?') {
-                Item item, candidate_result_item;
-
-                // id 越小优先级越高
-                if (var_sid < var_oid) {
-                    // 先在 ps 索引树上根据已知的 p 查找所有的 s
-                    item.search_type = Item::Type_T::PO;
-                    item.search_code = index->predicate2id[p];
-                    // 下一步应该查询的变量的索引
-                    item.candidate_result_idx = var_oid;
-                    item.search_range = index->get_search_range_from_ps_tree(item.search_code);
-                    item.search_range->id = range_cnt;
-                    range_cnt += 1;
-                    _query_plan[var_sid].push_back(item);
-                    // 非 none 的 item 的索引
-                    other_type_indices[var_sid].push_back(_query_plan[var_sid].size() - 1);
-
-                    // 然后根据每一对 ps 找到对应的 o
-                    // 先用none来占位
-                    candidate_result_item.search_type = Item::Type_T::None;
-                    candidate_result_item.search_code = item.search_code;  // don't have the search code
-                    candidate_result_item.candidate_result_idx = 0;        // don't have the candidate result
-                    candidate_result_item.search_range =
-                        std::make_shared<Result_Vector>();  // initialize search range state
-                    _query_plan[var_oid].push_back(candidate_result_item);
-                    // none item 的索引
-                    none_type_indices[var_oid].push_back(_query_plan[var_oid].size() - 1);
-                } else {
-                    item.search_code = index->predicate2id[p];
-                    item.search_type = Item::Type_T::PS;
-                    item.candidate_result_idx = var_sid;
-                    item.search_range = index->get_search_range_from_po_tree(item.search_code);
-                    item.search_range->id = range_cnt;
-                    range_cnt += 1;
-                    _query_plan[var_oid].push_back(item);
-                    other_type_indices[var_oid].push_back(_query_plan[var_oid].size() - 1);
-
-                    candidate_result_item.search_type = Item::Type_T::None;
-                    candidate_result_item.search_code = item.search_code;  // don't have the search code
-                    candidate_result_item.candidate_result_idx = 0;        // don't have the candidate result
-                    candidate_result_item.search_range =
-                        std::make_shared<Result_Vector>();  // initialize search range state
-                    _query_plan[var_sid].push_back(candidate_result_item);
-                    none_type_indices[var_sid].push_back(_query_plan[var_sid].size() - 1);
-                }
-
-                if (debug) {
-                    if (item.search_type == Item::Type_T::PO) {
-                        std::cout << "Item type: PO" << std::endl;
-                    } else {
-                        std::cout << "Item type: PS" << std::endl;
-                    }
-                    std::cout << "search code (predict): " << item.search_code << std::endl;
-                    if (var_sid < var_oid) {
-                        std::cout << "plan level: " << var_sid << std::endl;
-                    } else {
-                        std::cout << "plan level: " << var_oid << std::endl;
-                    }
-                }
-            }
-            // handle the situation of (?s p o)
-            else if (s[0] == '?') {
-                uint oid = index->get_entity_id(o);
-                uint pid = index->predicate2id[p];
-                std::shared_ptr<Result_Vector> r = index->get_by_po(pid, oid);
-                // std::shared_ptr<Result_Vector> r = single_variable_triple_results[p + "_" + o];
-                r->id = range_cnt;
-                prestore_result[var_sid].push_back(r);
-                range_cnt++;
-            }
-            // handle the situation of (s p ?o)
-            else if (o[0] == '?') {
-                uint sid = index->get_entity_id(s);
-                uint pid = index->predicate2id[p];
-                std::shared_ptr<Result_Vector> r = index->get_by_ps(pid, sid);
-                // std::shared_ptr<Result_Vector> r = single_variable_triple_results[p + "_" + s];
-                r->id = range_cnt;
-                prestore_result[var_oid].push_back(r);
-                range_cnt++;
-            }
-        }
-
-        if (debug) {
-            std::cout << "prestore_result:" << std::endl;
-            for (int level = 0; level < int(prestore_result.size()); level++) {
-                // _prestore_result[level].size();
-                std::cout << "level: " << level << " count: " << prestore_result[level].size() << std::endl;
-
-                for (int i = 0; i < int(prestore_result[level].size()); i++) {
-                    std::cout << "[";
-                    std::cout << prestore_result[level][i]->result.size();
-
-                    // std::for_each(
-                    //     _prestore_result[level][i].first, _prestore_result[level][i].second,
-                    //     [&](auto& node) { std::cout << index_structure->id2entity[node] << " ";
-                    // });
-                    std::cout << "] ";
-                }
-
-                std::cout << std::endl;
-            }
-        }
-
-        if (debug) {
-            std::cout << "all plan: " << std::endl;
-            for (int i = 0; i < int(_query_plan.size()); i++) {
-                for (int j = 0; j < int(_query_plan[i].size()); j++) {
-                    Item item = _query_plan[i][j];
-                    std::cout << item.search_range->id << " [";
-                    std::cout << item.search_range->result.size();
-                    // std::for_each(item.search_range.first, item.search_range.second,
-                    //               [&](auto& node) { std::cout << index_structure->id2entity[node] << "
-                    // ";
-                    //               });
-                    std::cout << "]";
-                }
-                std::cout << std::endl;
-            }
-            std::cout << "---------------------------------" << std::endl;
-        }
-
-        if (debug) {
-            std::cout << "all none: " << std::endl;
-            for (int i = 0; i < int(none_type_indices.size()); i++) {
-                std::cout << "level: " << i << " size: " << none_type_indices[i].size() << std::endl;
-            }
-            std::cout << "---------------------------------" << std::endl;
-        }
+        return allPaths;
     }
 
     void generate(const std::shared_ptr<Index>& index,
                   const std::vector<std::vector<std::string>>& triple_list) {
-        bool debug = false;
-
-        // 变量名 -> 出现此变量的三元组id（可以重复）
-        // 一个变量对应的的 id 的越多，表明在此变量上执行的连接次数就越多
-        phmap::flat_hash_map<std::string, std::vector<size_t>> variable_in_list;
-        phmap::flat_hash_map<std::string, size_t> variable_priority;
+        AdjacencyList query_graph_ud;
+        phmap::flat_hash_map<std::string, uint> est_size;
+        phmap::flat_hash_map<std::string, uint> univariates;
 
         for (size_t i = 0; i < triple_list.size(); ++i) {
             const auto& triple = triple_list[i];
-            const auto s = triple[0];
-            const auto p = triple[1];
-            const auto o = triple[2];
+            const std::string s = triple[0];
+            const std::string p = triple[1];
+            const std::string o = triple[2];
 
-            phmap::flat_hash_set<std::string> var_in_triplet;
-            if (s[0] == '?') {
-                var_in_triplet.insert(s);
-                variable_in_list[s].push_back(i);
+            std::string vertex1;
+            uint edge;
+            std::string vertex2;
+            uint size;
+
+            if (s[0] == '?' && o[0] == '?') {
+                vertex1 = s;
+                edge = index->predicate2id[p];
+                vertex2 = o;
+                // only support ?v predicate ?v
+                size = index->get_s_set_size(edge);
+                if (est_size[s] == 0 || est_size[s] > size) {
+                    est_size[s] = size;
+                }
+                size = index->get_o_set_size(edge);
+                if (est_size[o] == 0 || est_size[o] > size) {
+                    est_size[o] = size;
+                }
+            } else if (s[0] == '?' && p[0] == '?') {
+                vertex1 = s;
+                edge = index->get_entity_id(o);
+                vertex2 = p;
+            } else if (p[0] == '?' && o[0] == '?') {
+                vertex1 = p;
+                edge = index->get_entity_id(s);
+                vertex2 = o;
+            } else {
+                if (s[0] == '?') {
+                    univariates[s] += 1;
+                    size = index->get_by_po_size(index->predicate2id[p], index->get_entity_id(o));
+                    if (est_size[s] == 0 || est_size[s] > size) {
+                        est_size[s] = size;
+                    }
+                }
+                if (o[0] == '?') {
+                    univariates[o] += 1;
+                    size = index->get_by_po_size(index->predicate2id[p], index->get_entity_id(o));
+                    if (est_size[s] == 0 || est_size[s] > size) {
+                        est_size[s] = size;
+                    }
+                }
+                if (p[0] == '?')
+                    univariates[p] += 1;
+                continue;
             }
 
-            if (p[0] == '?') {
-                var_in_triplet.insert(p);
-                variable_in_list[p].push_back(i);
-            }
-
-            if (o[0] == '?') {
-                var_in_triplet.insert(o);
-                variable_in_list[o].push_back(i);
-            }
-
-            // 变量的权重为包含有此变量的单变量三元组数量
-            // 因为单变量的三元组的查询结果一般少于两个或三个变量的三元组
-            for (const auto& var : var_in_triplet) {
-                variable_priority[var] += (var_in_triplet.size() == 1 ? 1 : 0);
-            }
+            query_graph_ud[vertex1].push_back({vertex2, edge});
+            query_graph_ud[vertex2].push_back({vertex1, edge});
         }
-
-        // get the variable_count's key
-        std::vector<std::string> variables(variable_in_list.size());
-        // 获取所有变量名
-        std::transform(variable_in_list.begin(), variable_in_list.end(), variables.begin(),
-                       [](const auto& pair) { return pair.first; });
-
-        // 按照变量在三元组列表中出现的次数从大到小排序，如果次数相等，则按照变量的优先级排序
-        // sort 函数会将区间内的元素按照从小到大排序
-        // [&] 表明使用引用的方式访问外部变量
-        // lambda函数返回的是是否第一个参数小于第二个参数
-        std::sort(variables.begin(), variables.end(), [&](const auto& var1, const auto& var2) {
-            if (variable_in_list[var1].size() != variable_in_list[var2].size()) {
-                return variable_in_list[var1].size() > variable_in_list[var2].size();
-            }
-            return variable_priority[var1] > variable_priority[var2];
-        });
-
-        // mapping the variable to id
-        // 变量 -> 排序顺序
-
-        // variables = {"?X", "?Y", "?Z"}; // 3301.909289
-        // variables = {"?X", "?Z", "?Y"}; // 4027.433499
-        // variables = {"?Y", "?X", "?Z"}; // 2946.524109
-        // variables = {"?Y", "?Z", "?X"}; // 4596.390094
-        // variables = {"?Z", "?X", "?Y"}; // 6012.844853
-        // variables = {"?Z", "?Y", "?X"}; // 4676.747373
-        // variables = {"?v2", "?v1", "?v0", "?v3"};
 
         if (debug) {
-            std::cout << "var order:" << std::endl;
+            for (auto vertex_it = query_graph_ud.begin(); vertex_it != query_graph_ud.end(); vertex_it++) {
+                std::cout << vertex_it->first << ": ";
+                for (auto& edge : vertex_it->second) {
+                    std::cout << " (" << edge.first << "," << edge.second << ") ";
+                }
+                std::cout << std::endl;
+            }
+
+            for (auto& pair : est_size) {
+                std::cout << pair.first << ": " << pair.second << std::endl;
+            }
         }
+
+        std::vector<std::string> variable_priority(query_graph_ud.size());
+        std::transform(query_graph_ud.begin(), query_graph_ud.end(), variable_priority.begin(),
+                       [](const auto& pair) { return pair.first; });
+
+        std::sort(variable_priority.begin(), variable_priority.end(),
+                  [&](const auto& var1, const auto& var2) {
+                      if (query_graph_ud[var1].size() + univariates[var1] !=
+                          query_graph_ud[var2].size() + univariates[var2]) {
+                          return query_graph_ud[var1].size() + univariates[var1] >
+                                 query_graph_ud[var2].size() + univariates[var2];
+                      }
+                      return est_size[var1] < est_size[var2];
+                  });
+
+        if (debug) {
+            std::cout << "------------------------------" << std::endl;
+            for (auto& v : variable_priority) {
+                std::cout << v << ": " << est_size[v] << std::endl;
+            }
+        }
+
+        std::vector<std::string> one_degree_variables;
+        uint degree_two = 0;
+        uint other_degree = 0;
+        for (auto vertex_it = query_graph_ud.begin(); vertex_it != query_graph_ud.end(); vertex_it++) {
+            if (vertex_it->second.size() + univariates[vertex_it->first] == 1) {
+                one_degree_variables.push_back(vertex_it->first);
+            } else if (vertex_it->second.size() + univariates[vertex_it->first] == 2) {
+                degree_two++;
+            } else {
+                other_degree++;
+            }
+        }
+
+        std::vector<std::vector<std::string>> allPaths;
+        std::vector<std::vector<std::string>> partialPaths;
+        uint longest_path = 0;
+        while (variable_priority.size() > 0) {
+            partialPaths = findAllPathsInGraph(query_graph_ud, variable_priority[0]);
+            for (auto& path : partialPaths) {
+                for (auto& v : path) {
+                    for (auto it = variable_priority.begin(); it != variable_priority.end(); it++) {
+                        if (*it == v) {
+                            variable_priority.erase(it);
+                            break;
+                        }
+                    }
+                }
+                if (allPaths.size() == 0 || path.size() > allPaths[longest_path].size()) {
+                    longest_path = allPaths.size();
+                }
+                allPaths.push_back(path);
+            }
+        }
+
+        std::vector<std::string> plan;
+
+        if (!(one_degree_variables.size() == query_graph_ud.size() - 1) &&  // 非star
+            ((one_degree_variables.size() == 2 &&
+              one_degree_variables.size() + degree_two == query_graph_ud.size() &&
+              allPaths.size() == partialPaths.size()) ||  // 是连通图且是路径
+             allPaths.size() == 1)) {                     // 是一个环
+            if (allPaths.size() == 1) {                   // 是一个环/路径
+                if (est_size[allPaths[0][0]] < est_size[allPaths[0].back()]) {
+                    for (auto it = allPaths[0].begin(); it != allPaths[0].end(); it++) {
+                        plan.push_back(*it);
+                    }
+                } else {
+                    for (int i = allPaths[0].size() - 1; i > -1; i--) {
+                        plan.push_back(allPaths[0][i]);
+                    }
+                }
+            } else {  // 是一个路径
+                if (est_size[one_degree_variables[0]] < est_size[one_degree_variables[1]])
+                    plan.push_back(one_degree_variables[0]);
+                else
+                    plan.push_back(one_degree_variables[1]);
+                std::string previews = plan.back();
+                plan.push_back(query_graph_ud[previews][0].first);
+                while (plan.size() != query_graph_ud.size()) {
+                    if (query_graph_ud[plan.back()][0].first != previews) {
+                        previews = plan.back();
+                        plan.push_back(query_graph_ud[plan.back()][0].first);
+                    } else {
+                        previews = plan.back();
+                        plan.push_back(query_graph_ud[plan.back()][1].first);
+                    };
+                }
+            }
+        } else {
+            phmap::flat_hash_set<std::string> exist_variables;
+            for (auto& v : allPaths[longest_path]) {
+                exist_variables.insert(v);
+            }
+            for (uint i = 0; i < allPaths.size(); i++) {
+                if (i != longest_path) {
+                    for (auto it = allPaths[i].begin(); it != allPaths[i].end(); it++) {
+                        if (exist_variables.contains(*it)) {
+                            allPaths[i].erase(it);
+                            it--;
+                        } else {
+                            exist_variables.insert(*it);
+                        }
+                    }
+                }
+            }
+
+            if (debug) {
+                std::cout << "longest_path: " << longest_path << std::endl;
+                for (auto& path : allPaths) {
+                    for (auto it = path.begin(); it != path.end(); it++) {
+                        std::cout << *it << " ";
+                    }
+                    std::cout << std::endl;
+                }
+            }
+
+            std::vector<std::string>::iterator path_its[allPaths.size()];
+            for (uint i = 0; i < allPaths.size(); i++) {
+                path_its[i] = allPaths[i].begin();
+            }
+
+            for (uint i = 0; i < exist_variables.size() - allPaths.size(); i++) {
+                std::string min_variable = "";
+                uint path_id = 0;
+                for (uint p = 0; p < allPaths.size(); p++) {
+                    if (path_its[p] != allPaths[p].end() - 1) {
+                        if (min_variable == "" ||
+                            query_graph_ud[*path_its[p]].size() + univariates[*path_its[p]] >
+                                query_graph_ud[min_variable].size() + univariates[min_variable]) {
+                            min_variable = *path_its[p];
+                            path_id = p;
+                        }
+                    }
+                }
+                if (path_its[path_id] != allPaths[path_id].end() - 1)
+                    path_its[path_id]++;
+                plan.push_back(min_variable);
+            }
+
+            for (auto& path : allPaths) {
+                plan.push_back(*(path.end() - 1));
+            }
+        }
+
+        for (auto it = univariates.begin(); it != univariates.end(); it++) {
+            bool contains = false;
+            for (auto& v : plan) {
+                if (v == it->first) {
+                    contains = true;
+                }
+            }
+            if (!contains) {
+                plan.push_back(it->first);
+            }
+        }
+
+        if (debug) {
+            std::cout << "variables order: " << std::endl;
+            for (auto it = plan.begin(); it != plan.end(); it++) {
+                std::cout << *it << " ";
+            }
+            std::cout << std::endl;
+        }
+
+        gen_plan_table(index, triple_list, plan);
+    }
+
+    void gen_plan_table(const std::shared_ptr<Index>& index,
+                        const std::vector<std::vector<std::string>>& triple_list,
+                        std::vector<std::string>& variables) {
+
         for (size_t i = 0; i < variables.size(); ++i) {
             _variable2idx[variables[i]] = i;
             if (debug)
@@ -431,11 +376,6 @@ class QueryPlan {
             const std::string& p = triple[1];
             const std::string& o = triple[2];
 
-            if (debug) {
-                std::cout << "---------------------------------" << std::endl;
-                std::cout << "(" << s << ", " << p << ", " << o << ") plan: " << std::endl;
-            }
-
             if (p[0] == '?') {
                 // skip
                 // TODO: handle the situation of (s ?p o), (s ?p ?o), (?s ?p o), (?s ?p ?o)
@@ -455,7 +395,7 @@ class QueryPlan {
                     item.search_code = index->predicate2id[p];
                     // 下一步应该查询的变量的索引
                     item.candidate_result_idx = var_oid;
-                    item.search_range = index->get_search_range_from_ps_tree(item.search_code);
+                    item.search_range = index->get_s_set(item.search_code);
                     item.search_range->id = range_cnt;
                     range_cnt += 1;
                     _query_plan[var_sid].push_back(item);
@@ -468,7 +408,7 @@ class QueryPlan {
                     candidate_result_item.search_code = item.search_code;  // don't have the search code
                     candidate_result_item.candidate_result_idx = 0;        // don't have the candidate result
                     candidate_result_item.search_range =
-                        std::make_shared<Result_Vector>();  // initialize search range state
+                        std::make_shared<ResultVector>();  // initialize search range state
                     _query_plan[var_oid].push_back(candidate_result_item);
                     // none item 的索引
                     none_type_indices[var_oid].push_back(_query_plan[var_oid].size() - 1);
@@ -476,7 +416,7 @@ class QueryPlan {
                     item.search_code = index->predicate2id[p];
                     item.search_type = Item::Type_T::PS;
                     item.candidate_result_idx = var_sid;
-                    item.search_range = index->get_search_range_from_po_tree(item.search_code);
+                    item.search_range = index->get_o_set(item.search_code);
                     item.search_range->id = range_cnt;
                     range_cnt += 1;
                     _query_plan[var_oid].push_back(item);
@@ -486,31 +426,17 @@ class QueryPlan {
                     candidate_result_item.search_code = item.search_code;  // don't have the search code
                     candidate_result_item.candidate_result_idx = 0;        // don't have the candidate result
                     candidate_result_item.search_range =
-                        std::make_shared<Result_Vector>();  // initialize search range state
+                        std::make_shared<ResultVector>();  // initialize search range state
                     _query_plan[var_sid].push_back(candidate_result_item);
                     none_type_indices[var_sid].push_back(_query_plan[var_sid].size() - 1);
-                }
-
-                if (debug) {
-                    if (item.search_type == Item::Type_T::PO) {
-                        std::cout << "Item type: PO" << std::endl;
-                    } else {
-                        std::cout << "Item type: PS" << std::endl;
-                    }
-                    std::cout << "search code (predict): " << item.search_code << std::endl;
-                    if (var_sid < var_oid) {
-                        std::cout << "plan level: " << var_sid << std::endl;
-                    } else {
-                        std::cout << "plan level: " << var_oid << std::endl;
-                    }
                 }
             }
             // handle the situation of (?s p o)
             else if (s[0] == '?') {
                 uint oid = index->get_entity_id(o);
                 uint pid = index->predicate2id[p];
-                std::shared_ptr<Result_Vector> r = index->get_by_po(pid, oid);
-                // std::shared_ptr<Result_Vector> r = single_variable_triple_results[p + "_" + o];
+                std::shared_ptr<ResultVector> r = index->get_by_po(pid, oid);
+                // std::shared_ptr<ResultVector> r = single_variable_triple_results[p + "_" + o];
                 r->id = range_cnt;
                 prestore_result[var_sid].push_back(r);
                 range_cnt++;
@@ -519,8 +445,8 @@ class QueryPlan {
             else if (o[0] == '?') {
                 uint sid = index->get_entity_id(s);
                 uint pid = index->predicate2id[p];
-                std::shared_ptr<Result_Vector> r = index->get_by_ps(pid, sid);
-                // std::shared_ptr<Result_Vector> r = single_variable_triple_results[p + "_" + s];
+                std::shared_ptr<ResultVector> r = index->get_by_ps(pid, sid);
+                // std::shared_ptr<ResultVector> r = single_variable_triple_results[p + "_" + s];
                 r->id = range_cnt;
                 prestore_result[var_oid].push_back(r);
                 range_cnt++;
@@ -546,27 +472,20 @@ class QueryPlan {
 
                 std::cout << std::endl;
             }
-        }
+            std::cout << "---------------------------------" << std::endl;
 
-        if (debug) {
             std::cout << "all plan: " << std::endl;
             for (int i = 0; i < int(_query_plan.size()); i++) {
                 for (int j = 0; j < int(_query_plan[i].size()); j++) {
                     Item item = _query_plan[i][j];
                     std::cout << item.search_range->id << " [";
                     std::cout << item.search_range->result.size();
-                    // std::for_each(item.search_range.first, item.search_range.second,
-                    //               [&](auto& node) { std::cout << index_structure->id2entity[node] << "
-                    // ";
-                    //               });
-                    std::cout << "]";
+                    std::cout << "] ";
                 }
                 std::cout << std::endl;
             }
             std::cout << "---------------------------------" << std::endl;
-        }
 
-        if (debug) {
             std::cout << "all none: " << std::endl;
             for (int i = 0; i < int(none_type_indices.size()); i++) {
                 std::cout << "level: " << i << " size: " << none_type_indices[i].size() << std::endl;
@@ -590,17 +509,13 @@ class QueryPlan {
 
     [[nodiscard]] const std::vector<std::vector<Item>>& plan() const { return _query_plan; }
 
-    // [[nodiscard]] const std::vector<std::vector<std::shared_ptr<Result_Vector>>>& prestore_result() const {
-    //     return _prestore_result;
-    // }
-
-   public:
     size_t limit;
     std::vector<std::vector<size_t>> other_type_indices;
     std::vector<std::vector<size_t>> none_type_indices;
-    std::vector<std::vector<std::shared_ptr<Result_Vector>>> prestore_result;
+    std::vector<std::vector<std::shared_ptr<ResultVector>>> prestore_result;
 
    private:
+    bool debug = false;
     // 二维数组，变量的优先级顺序id -> 此变量在不同的三元组中的查询结果
     std::vector<std::vector<Item>> _query_plan;
     phmap::flat_hash_map<std::string, uint64_t> _variable2idx;

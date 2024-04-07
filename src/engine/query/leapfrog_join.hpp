@@ -16,7 +16,7 @@
 
 #include "result_vector_list.hpp"
 
-void leapfrog_join(Result_Vector_List& pair_begin_end, std::vector<uint>& result_set) {
+void leapfrog_join(ResultVectorList& pair_begin_end, std::vector<uint>& result_set) {
     uint value;
 
     // Check if any index is empty => Intersection empty
@@ -77,10 +77,13 @@ void leapfrog_join(Result_Vector_List& pair_begin_end, std::vector<uint>& result
     }
 }
 
-std::shared_ptr<std::vector<uint>> leapfrog_join(Result_Vector_List& indexes) {
+std::shared_ptr<std::vector<uint>> leapfrog_join(ResultVectorList& indexes) {
     std::shared_ptr<std::vector<uint>> resultSet = std::make_shared<std::vector<uint>>();
 
-    // std::cout << "size: " << indexes.size() << std::endl;ge
+    // std::cout << "size: " << indexes.size() << std::endl;
+    if (indexes.size() == 1) {
+        return std::make_shared<std::vector<uint>>(indexes.get_range_by_index(0)->result);
+    }
 
     leapfrog_join(indexes, *resultSet);
 

@@ -50,8 +50,8 @@ class Index {
     Virtual_Memory _po_predicate_map;
     Virtual_Memory _entity_index_arrays;
 
-    std::vector<std::shared_ptr<Result_Vector>> ps_sets;
-    std::vector<std::shared_ptr<Result_Vector>> po_sets;
+    std::vector<std::shared_ptr<ResultVector>> ps_sets;
+    std::vector<std::shared_ptr<ResultVector>> po_sets;
 
     void load_db_info() {
         Virtual_Memory vm = Virtual_Memory(_db_data_path + "DB_INFO", 9 * 4);
@@ -119,9 +119,9 @@ class Index {
         uint s_array_size;
         uint o_array_offset;
         uint o_array_size;
-        std::shared_ptr<Result_Vector> rv;
+        std::shared_ptr<ResultVector> rv;
 
-        FloatInt fi;
+        // FloatInt fi;
         // for (uint pid = 1; pid <= _predicate_cnt; pid++) {
         //     fi.i = _predicate_index[(pid - 1) * 4 + 1];
         //     std::cout << pid << " " << fi.f << " ";
@@ -138,13 +138,13 @@ class Index {
             else
                 o_array_size = _predicate_index_arrays_file_size / 4 - o_array_offset;
 
-            rv = std::make_shared<Result_Vector>(s_array_size);
+            rv = std::make_shared<ResultVector>(s_array_size);
             for (uint i = 0; i < s_array_size; i++) {
                 rv->result[i] = _predicate_index_arrays[s_array_offset + i];
             }
             ps_sets.push_back(rv);
 
-            rv = std::make_shared<Result_Vector>(o_array_size);
+            rv = std::make_shared<ResultVector>(o_array_size);
             for (uint i = 0; i < o_array_size; i++) {
                 rv->result[i] = _predicate_index_arrays[o_array_offset + i];
             }
@@ -383,11 +383,11 @@ class Index {
 
     uint get_predicate_cnt() { return _predicate_cnt; }
 
-    std::shared_ptr<Result_Vector> get_search_range_from_ps_tree(uint pid) {
+    std::shared_ptr<ResultVector> get_s_set(uint pid) {
         // uint offset = _btree_pos[(pid - 1) * 4];
         // uint size = _btree_pos[(pid - 1) * 4 + 1];
 
-        // std::shared_ptr<Result_Vector> rv = std::make_shared<Result_Vector>(size);
+        // std::shared_ptr<ResultVector> rv = std::make_shared<ResultVector>(size);
 
         // for (uint i = 0; i < size; i++) {
         //     rv->result[i] = _btrees[offset + i];
@@ -396,11 +396,15 @@ class Index {
         return ps_sets[pid - 1];
     }
 
-    std::shared_ptr<Result_Vector> get_search_range_from_po_tree(uint pid) {
+    uint get_s_set_size(uint pid) {
+        return _predicate_index[(pid - 1) * 4 + 2] - _predicate_index[(pid - 1) * 4];
+    }
+
+    std::shared_ptr<ResultVector> get_o_set(uint pid) {
         // uint offset = _btree_pos[(pid - 1) * 4 + 2];
         // uint size = _btree_pos[(pid - 1) * 4 + 3];
 
-        // std::shared_ptr<Result_Vector> rv = std::make_shared<Result_Vector>(size);
+        // std::shared_ptr<ResultVector> rv = std::make_shared<ResultVector>(size);
 
         // for (uint i = 0; i < size; i++) {
         //     rv->result[i] = _btrees[offset + i];
@@ -410,24 +414,32 @@ class Index {
         return po_sets[pid - 1];
     }
 
+    uint get_o_set_size(uint pid) {
+        uint o_array_offset = _predicate_index[(pid - 1) * 4 + 2];
+        if (pid != _predicate_cnt)
+            return _predicate_index[pid * 4] - o_array_offset;
+        else
+            return _predicate_index_arrays_file_size / 4 - o_array_offset;
+    }
+
     uint ps_size(uint pid) { return _predicate_index[(pid - 1) * 4 + 1]; }
 
     uint po_size(uint pid) { return _predicate_index[(pid - 1) * 4 + 3]; }
 
-    std::shared_ptr<Result_Vector> get_by_ps(uint p, uint s) {
+    std::shared_ptr<ResultVector> get_by_ps(uint p, uint s) {
         uint offset = _entity_index[(s - 1) * 4];
         uint size = _entity_index[(s - 1) * 4 + 1];
 
         uint array_offset;
         uint array_size;
 
-        std::shared_ptr<Result_Vector> rv;
+        std::shared_ptr<ResultVector> rv;
 
         for (uint i = 0; i < size; i++) {
             if (_po_predicate_map[offset + 3 * i] == p) {
                 array_offset = _po_predicate_map[offset + 3 * i + 1];
                 array_size = _po_predicate_map[offset + 3 * i + 2];
-                rv = std::make_shared<Result_Vector>(array_size);
+                rv = std::make_shared<ResultVector>(array_size);
                 for (uint j = 0; j < array_size; j++) {
                     rv->result[j] = _entity_index_arrays[array_offset + j];
                 }
@@ -436,32 +448,54 @@ class Index {
                 return rv;
             }
         }
-        return std::make_shared<Result_Vector>(0);
+        return std::make_shared<ResultVector>(0);
     }
 
-    std::shared_ptr<Result_Vector> get_by_po(uint p, uint o) {
+    uint get_by_ps_size(uint p, uint s) {
+        uint offset = _entity_index[(s - 1) * 4];
+        uint size = _entity_index[(s - 1) * 4 + 1];
+
+        for (uint i = 0; i < size; i++) {
+            if (_po_predicate_map[offset + 3 * i] == p) {
+                return _po_predicate_map[offset + 3 * i + 2];
+            }
+        }
+        return UINT_MAX;
+    }
+
+    std::shared_ptr<ResultVector> get_by_po(uint p, uint o) {
         uint offset = _entity_index[(o - 1) * 4 + 2];
         uint size = _entity_index[(o - 1) * 4 + 3];
 
         uint array_offset;
         uint array_size;
 
-        std::shared_ptr<Result_Vector> rv;
+        std::shared_ptr<ResultVector> rv;
 
         for (uint i = 0; i < size; i++) {
             if (_ps_predicate_map[offset + 3 * i] == p) {
                 array_offset = _ps_predicate_map[offset + 3 * i + 1];
                 array_size = _ps_predicate_map[offset + 3 * i + 2];
-                rv = std::make_shared<Result_Vector>(array_size);
+                rv = std::make_shared<ResultVector>(array_size);
                 for (uint j = 0; j < array_size; j++) {
                     rv->result[j] = _entity_index_arrays[array_offset + j];
                 }
-                // std::cout << "po " << p << " " << o << " " << rv->result.size() << std::endl;
-                // usleep(100000);
                 return rv;
             }
         }
-        return std::make_shared<Result_Vector>(0);
+        return std::make_shared<ResultVector>(0);
+    }
+
+    uint get_by_po_size(uint p, uint o) {
+        uint offset = _entity_index[(o - 1) * 4 + 2];
+        uint size = _entity_index[(o - 1) * 4 + 3];
+
+        for (uint i = 0; i < size; i++) {
+            if (_ps_predicate_map[offset + 3 * i] == p) {
+                return _ps_predicate_map[offset + 3 * i + 2];
+            }
+        }
+        return UINT_MAX;
     }
 };
 

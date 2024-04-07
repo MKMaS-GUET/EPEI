@@ -13,7 +13,7 @@
 #include <memory>
 #include <string>
 
-#include <epei/engine.hpp>
+#include <pppe/engine.hpp>
 
 #include "parser/sparql_parser.hpp"
 #include "query/query_executor.hpp"
@@ -23,7 +23,7 @@
 #include "store/build_index.hpp"
 #include "store/index.hpp"
 
-class epei::Engine::Impl {
+class pppe::Engine::Impl {
    public:
     void create(const std::string& db_name, const std::string& data_file) {
         auto beg = std::chrono::high_resolution_clock::now();
