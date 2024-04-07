@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace pppe {
+namespace ppfi {
 
 class Engine {
    private:
@@ -34,6 +34,6 @@ class Engine {
     std::shared_ptr<Impl> _impl;
 };
 
-}  // namespace pppe
+}  // namespace ppfi
 
 #endif  // ENGINE_HPP

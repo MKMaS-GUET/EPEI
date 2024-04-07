@@ -215,7 +215,6 @@ class QueryExecutor {
             // check whether there are some have the Item::Type_T::None
             enumerate_items(stat);
             if (stat.at_end) {
-                // std::cout << "end!" << std::endl;
                 return;
             }
         }
@@ -259,9 +258,6 @@ class QueryExecutor {
         // 1.单变量三元组的查询结果，存储在 _prestore_result 中，
         // 2.双变量三元组的 none 类型的 item，查询结果search_range在之前的层数被填充在 plan 中，
         // 3.双变量三元组的非 none 类型的 item
-        // 要把这三种查询结果一起进行交集操作
-
-        // join_cnt[stat.level] += 1;
 
         const auto& item_none_type_indices = _p_query_plan->none_type_indices[stat.level];
         const auto& item_other_type_indices = _p_query_plan->other_type_indices[stat.level];

@@ -2,14 +2,14 @@
 #include <iterator>
 #include <sstream>
 
-#include <pppe/engine.hpp>
+#include <ppfi/engine.hpp>
 
 #include "parser/args_parser.hpp"
 
 void build(const std::unordered_map<std::string, std::string>& arguments) {
     std::string db_name = arguments.at("name");
     std::string data_file = arguments.at("file");
-    pppe::Engine::Create(db_name, data_file);
+    ppfi::Engine::Create(db_name, data_file);
 }
 
 void query(const std::unordered_map<std::string, std::string>& arguments) {
@@ -20,13 +20,13 @@ void query(const std::unordered_map<std::string, std::string>& arguments) {
     if (arguments.count("name"))
         sparql_file = arguments.at("file");
 
-    pppe::Engine::Query(db_name, sparql_file);
+    ppfi::Engine::Query(db_name, sparql_file);
 }
 
 void server(const std::unordered_map<std::string, std::string>& arguments) {
     std::string ip = arguments.at("ip");
     std::string port = arguments.at("port");
-    pppe::Engine::Server(ip, port);
+    ppfi::Engine::Server(ip, port);
 }
 
 struct EnumClassHash {

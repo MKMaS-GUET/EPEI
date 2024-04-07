@@ -1,4 +1,4 @@
-# PPPE
+# PPFI
 
 An RDF Retrieval System Based on **E**fficient **P**redicate-**E**ntity **I**ndexing
 
@@ -9,7 +9,7 @@ A Vue front-end is avaiable  [here](https://github.com/LiuYipeng42/RDF_Retrieval
 1. Clone this project
 
 ```shell
-git clone https://github.com/MKMaS-GUET/PPPE
+git clone https://github.com/MKMaS-GUET/PPFI
 git submodule update --init --recursive
 ```
 
@@ -41,15 +41,15 @@ Download the RDF data and queries that we want to use:
 ## How to use
 
 ```
-Usage: pppe <command> [<args>]
+Usage: ppfi <command> [<args>]
 
 Description:
-  Common commands for various situations using PPPE.
+  Common commands for various situations using PPFI.
 
 Commands:
   build      Build the data index for the given RDF data file path.
   query      Query the SPARQL statement for the given file path.
-  server     Start the PPPE server.
+  server     Start the PPFI server.
 
 Options:
   -h, --help      Show this help message and exit.
@@ -66,7 +66,7 @@ Positional Arguments:
 Build RDF database:
 
 ```shell
-pppe build -n <rdf_db_name> -f <rdf_file_name>
+ppfi build -n <rdf_db_name> -f <rdf_file_name>
 ```
 
 Execute SPARQL query:
@@ -99,10 +99,10 @@ Options:
 Run http  server:
 
 ```shell
-Usage: pppe server [-p,--port PORT]
+Usage: ppfi server [-p,--port PORT]
 
 Description:
-  Start the HTTP server for PPPE.
+  Start the HTTP server for PPFI.
 
 Options:
   -p, --port <PORT>   Specify the HTTP server port.
@@ -111,6 +111,6 @@ Optional Arguments:
   -h, --help          Show this help message and exit.
 
 Examples:
-  pppe server --port 8080
+  ppfi server --port 8080
 ```
 

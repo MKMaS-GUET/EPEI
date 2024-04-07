@@ -8,7 +8,7 @@
 
 #include "engine-impl.hpp"
 
-namespace pppe {
+namespace ppfi {
 
 void Engine::Create(const std::string& db_name, const std::string& data_file) {
     auto impl = std::make_shared<Engine::Impl>();
@@ -25,4 +25,4 @@ void Engine::Server(const std::string& ip, const std::string& port) {
     impl->server(ip, port);
 }
 
-}  // namespace pppe
+}  // namespace ppfi

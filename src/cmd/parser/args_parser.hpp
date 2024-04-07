@@ -47,15 +47,15 @@ class ArgsParser {
     };
 
     const std::string _help_info =
-        "Usage: pppe <command> [<args>]\n"
+        "Usage: ppfi <command> [<args>]\n"
         "\n"
         "Description:\n"
-        "  Common commands for various situations using PPPE.\n"
+        "  Common commands for various situations using PPFI.\n"
         "\n"
         "Commands:\n"
         "  build      Build the data index for the given RDF data file path.\n"
         "  query      Query the SPARQL statement for the given file path.\n"
-        "  server     Start the PPPE server.\n"
+        "  server     Start the PPFI server.\n"
         "\n"
         "Options:\n"
         "  -h, --help      Show this help message and exit.\n"
@@ -75,7 +75,7 @@ class ArgsParser {
     Command_T parse(int argc, char** argv) {
         if (argc == 1) {
             std::cout << _help_info << std::endl;
-            std::cerr << "pppe: error: the following arguments are required: command" << std::endl;
+            std::cerr << "ppfi: error: the following arguments are required: command" << std::endl;
             exit(1);
         }
 
@@ -88,7 +88,7 @@ class ArgsParser {
 
         if (!_position.count(argv1)) {
             std::cout << _help_info << std::endl;
-            std::cerr << "pppe: error: the following arguments are required: command" << std::endl;
+            std::cerr << "ppfi: error: the following arguments are required: command" << std::endl;
             exit(1);
         }
 
@@ -121,7 +121,7 @@ class ArgsParser {
 
    private:
     const std::string _build_info =
-        "Usage: pppe build [-n,--name NAME] [-f,--file FILE]\n"
+        "Usage: ppfi build [-n,--name NAME] [-f,--file FILE]\n"
         "\n"
         "Description:\n"
         "Build the data index for the given RDF data file path.\n"
@@ -134,17 +134,17 @@ class ArgsParser {
         "  -h, --help          Show this help message and exit.\n"
         "\n"
         "Examples:\n"
-        "  pppe build -n my_database -f /path/to/data.rdf\n";
+        "  ppfi build -n my_database -f /path/to/data.rdf\n";
 
     const std::string _query_info =
-        "usage: pppe query"
+        "usage: ppfi query"
         "\n";
 
     const std::string _serve_info =
-        "Usage: pppe server [-p,--port PORT]\n"
+        "Usage: ppfi server [-p,--port PORT]\n"
         "\n"
         "Description:\n"
-        "  Start the HTTP server for PPPE.\n"
+        "  Start the HTTP server for PPFI.\n"
         "\n"
         "Options:\n"
         "  -ip                 Specify the HTTP server ip.\n"
@@ -154,7 +154,7 @@ class ArgsParser {
         "  -h, --help          Show this help message and exit.\n"
         "\n"
         "Examples:\n"
-        "  pppe server --port 8080;\n";
+        "  ppfi server --port 8080;\n";
 
    private:
     void build(const std::unordered_map<std::string, std::string>& args) {
@@ -164,8 +164,8 @@ class ArgsParser {
         }
         if ((!args.count("-db") && !args.count("--database")) ||
             (!args.count("-f") && !args.count("--file"))) {
-            std::cerr << "usage: pppe build [-db DATABASE] [-f FILE]" << std::endl;
-            std::cerr << "pppe: error: the following arguments are required: [-db DATABASE] [-f FILE]"
+            std::cerr << "usage: ppfi build [-db DATABASE] [-f FILE]" << std::endl;
+            std::cerr << "ppfi: error: the following arguments are required: [-db DATABASE] [-f FILE]"
                       << std::endl;
             exit(1);
         }
@@ -180,8 +180,8 @@ class ArgsParser {
         }
 
         // if (!args.count("-db") && !args.count("--database")) {
-        //     std::cerr << "usage: pppe query [-db DATABASE]" << std::endl;
-        //     std::cerr << "pppe: error: the following argument is required: [-db DATABASE]" << std::endl;
+        //     std::cerr << "usage: ppfi query [-db DATABASE]" << std::endl;
+        //     std::cerr << "ppfi: error: the following argument is required: [-db DATABASE]" << std::endl;
         //     exit(1);
         // }
         if (args.count("-db"))
@@ -206,14 +206,14 @@ class ArgsParser {
             exit(1);
         }
         if ((!args.count("-p") && !args.count("--port")) || !args.count("-ip")) {
-            std::cerr << "usage: pppe server [-ip IP] [-p PORT]" << std::endl;
-            std::cerr << "pppe: error: the following arguments are required: [-ip IP] [-p PORT]" << std::endl;
+            std::cerr << "usage: ppfi server [-ip IP] [-p PORT]" << std::endl;
+            std::cerr << "ppfi: error: the following arguments are required: [-ip IP] [-p PORT]" << std::endl;
             exit(1);
         }
         _arguments[_arg_ip] = args.at("-ip");
         _arguments[_arg_port] = args.count("-p") ? args.at("-p") : args.at("--port");
         if (!isNumber(_arguments[_arg_port])) {
-            std::cerr << "pppe: error: the argument [-p PORT] requires a number, but got "
+            std::cerr << "ppfi: error: the argument [-p PORT] requires a number, but got "
                       << _arguments[_arg_port] << std::endl;
             exit(1);
         }
