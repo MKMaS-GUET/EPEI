@@ -11,6 +11,7 @@
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <queue>
 #include <string>
 #include <thread>
 #include <vector>
@@ -19,33 +20,12 @@
 #define MAX_SIZE 20000
 
 namespace fs = std::filesystem;
-using entity_set = phmap::btree_set<uint>;
 using phmap::btree_map;
 using phmap::flat_hash_map;
 using phmap::flat_hash_set;
 using std::pair;
 
 class Node {
-   public:
-    std::vector<uint> nums;
-    Node* next = 0;
-
-    Node() { nums = std::vector<uint>(); }
-
-    Node(int reverse_size) {
-        nums = std::vector<uint>();
-        nums.reserve(reverse_size);
-    }
-
-    void move_halh_to(Node* target_node) {
-        auto middle = nums.begin() + nums.size() / 2;
-
-        std::move(std::make_move_iterator(middle), std::make_move_iterator(nums.end()),
-                  std::back_inserter(target_node->nums));
-
-        nums.erase(middle, nums.end());
-    }
-
     void add(uint num) {
         if (nums.size() == 0) {
             nums.push_back(num);
@@ -59,49 +39,104 @@ class Node {
             nums.insert(iter, num);
         }
     }
-};
 
-void add_by_order(Node* first, uint num) {
-    if (first->nums.size() == 0) {
-        first->nums.push_back(num);
-        return;
+    void move_halh_to(Node* target_node) {
+        auto middle = nums.begin() + nums.size() / 2;
+
+        std::move(std::make_move_iterator(middle), std::make_move_iterator(nums.end()),
+                  std::back_inserter(target_node->nums));
+
+        nums.erase(middle, nums.end());
     }
 
-    Node* current_node = first;
-    while (true) {
-        if (current_node->nums.back() >= num) {
-            current_node->add(num);
-            // size++;
-            if (current_node->nums.size() == MAX_SIZE) {
-                Node* new_node = new Node(MAX_SIZE / 2);
-                new_node->next = current_node->next;
-                current_node->next = new_node;
-                current_node->move_halh_to(new_node);
-            }
+   public:
+    std::vector<uint> nums;
+    Node* next = 0;
+
+    Node() { nums = std::vector<uint>(); }
+
+    Node(int reverse_size) {
+        nums = std::vector<uint>();
+        nums.reserve(reverse_size);
+    }
+
+    void add_by_order(uint num) {
+        if (nums.size() == 0) {
+            nums.push_back(num);
             return;
         }
 
-        if (current_node->next == NULL) {
-            break;
+        Node* current_node = this;
+        while (true) {
+            if (current_node->nums.back() >= num) {
+                current_node->add(num);
+                // size++;
+                if (current_node->nums.size() == MAX_SIZE) {
+                    Node* new_node = new Node(MAX_SIZE / 2);
+                    new_node->next = current_node->next;
+                    current_node->next = new_node;
+                    current_node->move_halh_to(new_node);
+                }
+                return;
+            }
+
+            if (current_node->next == NULL) {
+                break;
+            }
+            current_node = current_node->next;
         }
-        current_node = current_node->next;
+
+        current_node->nums.push_back(num);
+        // size++;
+        if (current_node->nums.size() == MAX_SIZE) {
+            Node* new_node = new Node(MAX_SIZE / 2);
+            new_node->next = current_node->next;
+            current_node->next = new_node;
+            current_node->move_halh_to(new_node);
+        }
+    }
+};
+
+struct PredicateIndex {
+    phmap::btree_set<uint> s_set;
+    phmap::btree_set<uint> o_set;
+
+    void build(flat_hash_set<pair<uint, uint>>& so_pairs) {
+        for (const auto& so : so_pairs) {
+            s_set.insert(so.first);
+            o_set.insert(so.second);
+        }
     }
 
-    current_node->nums.push_back(num);
-    // size++;
-    if (current_node->nums.size() == MAX_SIZE) {
-        Node* new_node = new Node(MAX_SIZE / 2);
-        new_node->next = current_node->next;
-        current_node->next = new_node;
-        current_node->move_halh_to(new_node);
+    void clear() {
+        phmap::btree_set<uint>().swap(s_set);
+        phmap::btree_set<uint>().swap(o_set);
     }
-}
+};
+
+// index for a predicate
+struct EntityIndex {
+    flat_hash_map<uint, Node> s_to_o;
+    flat_hash_map<uint, Node> o_to_s;
+
+    void build(flat_hash_set<pair<uint, uint>>& so_pairs) {
+        for (const auto& so : so_pairs) {
+            s_to_o[so.first].add_by_order(so.second);
+            o_to_s[so.second].add_by_order(so.first);
+        }
+    }
+
+    void clear() {
+        flat_hash_map<uint, Node>().swap(s_to_o);
+        flat_hash_map<uint, Node>().swap(o_to_s);
+    }
+};
 
 class IndexBuilder {
     std::string _data_file;
     std::string _db_data_path;
     std::string _db_name;
-    uint _threads = 6;
+    uint _threads = 3;
 
     Virtual_Memory _predicate_index;
     Virtual_Memory _predicate_index_arrays;
@@ -124,6 +159,8 @@ class IndexBuilder {
     std::vector<pair<uint, uint>> _predicate_rank;
 
     flat_hash_map<uint, flat_hash_set<pair<uint, uint>>> _pso;
+
+    std::vector<std::pair<uint, uint>> _predicate_map_file_offset;
 
    public:
     IndexBuilder(std::string db_name, std::string data_file) {
@@ -150,8 +187,8 @@ class IndexBuilder {
         calculate_predicate_rank();
 
         // predict -> (o_set, s_set)
-        std::vector<pair<entity_set, entity_set>> predicate_index(_predicate_cnt);
-        build_predicate_index(predicate_index);
+        std::vector<PredicateIndex> predicate_indexes(_predicate_cnt);
+        build_predicate_index(predicate_indexes);
 
         // count how many predicates every o/s has
         uint* ps_predicate_map_size = (uint*)malloc(4 * _entity_cnt);
@@ -159,20 +196,19 @@ class IndexBuilder {
         std::memset(ps_predicate_map_size, 0, 4 * _entity_cnt);
         std::memset(po_predicate_map_size, 0, 4 * _entity_cnt);
 
-        store_predicate_index(predicate_index, ps_predicate_map_size, po_predicate_map_size);
+        store_predicate_index(predicate_indexes, ps_predicate_map_size, po_predicate_map_size);
 
         // first: PS_PREDICATE_MAP file offset  second: PO_PREDICATE_MAP file offset
-        std::vector<std::pair<uint, uint>> predicate_map_file_offset(_entity_cnt);
-        store_entity_index(ps_predicate_map_size, po_predicate_map_size, predicate_map_file_offset);
+        _predicate_map_file_offset = std::vector<std::pair<uint, uint>>(_entity_cnt);
+        store_entity_index(ps_predicate_map_size, po_predicate_map_size);
 
         free(ps_predicate_map_size);
         free(po_predicate_map_size);
 
-        build_predicate_maps(predicate_map_file_offset);
+        build_predicate_maps();
 
         store_db_info();
 
-        // while(1);
         return true;
     }
 
@@ -252,8 +288,11 @@ class IndexBuilder {
         for (int i = 0; i < 4; i++)
             entity_outs[i].close();
 
-        flat_hash_map<std::string, uint>().swap(entity2id);
-        malloc_trim(0);
+        std::thread t([&]() {
+            flat_hash_map<std::string, uint>().swap(entity2id);
+            malloc_trim(0);
+        });
+        t.detach();
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> diff = end - beg;
@@ -275,103 +314,91 @@ class IndexBuilder {
         // }
     }
 
-    void build_predicate_index(std::vector<pair<entity_set, entity_set>>& predicate_index) {
+    void build_predicate_index(std::vector<PredicateIndex>& predicate_indexes) {
         auto beg = std::chrono::high_resolution_clock::now();
 
-        if (_threads != 1)
-            multi_thread_build_predicate_index(predicate_index);
-        else
-            single_thread_build_predicate_index(predicate_index);
+        uint pid = 0;
+        double finished = 0;
+        std::string info = "building predicate index: ";
+
+        if (_threads == 1) {
+            progress(finished, 0, info);
+            for (uint tid = 0; tid < _predicate_cnt; tid++) {
+                pid = _predicate_rank[tid].first;
+                predicate_indexes[pid - 1].build(_pso[pid]);
+
+                update_file_size(predicate_indexes[pid - 1].s_set.size(),
+                                 predicate_indexes[pid - 1].o_set.size());
+
+                progress(finished, pid, info);
+            }
+        } else {
+            // -1: all tasks finished
+            //  0: task unfinished
+            //  1: task finished
+            std::vector<pair<uint, int>> task_status(_threads);
+
+            for (uint tid = 0; tid < _threads; tid++) {
+                pid = _predicate_rank[tid].first;
+                task_status[tid] = {pid, 0};
+                std::thread t(std::bind(&IndexBuilder::sub_build_predicate_index_task, this,
+                                        &task_status[tid], &predicate_indexes));
+                t.detach();
+            }
+
+            uint rank = _threads;
+            uint finish_cnt = 0;
+            progress(finished, 0, info);
+            while (finish_cnt < _predicate_cnt) {
+                for (uint tid = 0; tid < _threads; tid++) {
+                    if (task_status[tid].first != 0 && task_status[tid].second == 1) {
+                        finish_cnt++;
+                        pid = task_status[tid].first;
+                        progress(finished, pid, info);
+
+                        update_file_size(predicate_indexes[pid - 1].s_set.size(),
+                                         predicate_indexes[pid - 1].o_set.size());
+
+                        if (rank < _predicate_rank.size()) {
+                            pid = _predicate_rank[rank].first;
+                            task_status[tid] = {pid, 0};
+                            rank++;
+                        } else {
+                            task_status[tid] = {0, -1};
+                        }
+                    }
+                }
+
+                usleep(10000);
+            }
+        }
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> diff = end - beg;
         std::cout << "build predicate index takes " << diff.count() << " ms.                 " << std::endl;
     }
 
-    void single_thread_build_predicate_index(std::vector<pair<entity_set, entity_set>>& predicate_index) {
-        uint ps_set_size;
-        uint po_set_size;
-        uint pid = 0;
-        double finished = 0;
-        std::string info = "building predicate index: ";
-        progress(finished, 0, info);
-        for (uint tid = 0; tid < _predicate_cnt; tid++) {
-            pid = _predicate_rank[tid].first;
+    void update_file_size(uint ps_set_size, uint po_set_size) {
+        _predicate_index_arrays_file_size += ps_set_size * 4 + po_set_size * 4;
+        _ps_predicate_map_file_size += po_set_size * 3 * 4;
+        _po_predicate_map_file_size += ps_set_size * 3 * 4;
+    }
 
-            for (const auto& so : _pso[pid]) {
-                predicate_index[pid - 1].first.insert(so.first);
-                predicate_index[pid - 1].second.insert(so.second);
+    void sub_build_predicate_index_task(pair<uint, int>* task_status,
+                                        std::vector<PredicateIndex>* predicate_indexes) {
+        uint pid;
+        while (task_status->second != -1) {
+            pid = task_status->first;
+            predicate_indexes->at(pid - 1).build(_pso[pid]);
+
+            task_status->second = 1;
+            while (task_status->second == 1) {
+                usleep(5000);
             }
-
-            ps_set_size = predicate_index[pid - 1].first.size();
-            po_set_size = predicate_index[pid - 1].second.size();
-            _predicate_index_arrays_file_size += ps_set_size * 4 + po_set_size * 4;
-            _ps_predicate_map_file_size += po_set_size * 3 * 4;
-            _po_predicate_map_file_size += ps_set_size * 3 * 4;
-
-            progress(finished, pid, info);
         }
     }
 
-    void multi_thread_build_predicate_index(std::vector<pair<entity_set, entity_set>>& predicate_index) {
-        std::vector<pair<uint, uint>> task_status(_threads);
-
-        uint pid = 0;
-        for (uint tid = 0; tid < _threads; tid++) {
-            pid = _predicate_rank[tid].first;
-            task_status[tid] = {pid, 0};
-            std::thread t(std::bind(&IndexBuilder::sub_build_predicate_index_task, this, pid,
-                                    &task_status[tid].second, &predicate_index[pid - 1]));
-            t.detach();
-        }
-
-        uint ps_set_size;
-        uint po_set_size;
-        uint rank = _threads;
-        uint finish_cnt = 0;
-        double finished = 0;
-        std::string info = "building predicate index: ";
-        progress(finished, 0, info);
-        while (finish_cnt < _predicate_cnt) {
-            for (uint tid = 0; tid < _threads; tid++) {
-                if (task_status[tid].first != 0 && task_status[tid].second == 1) {
-                    finish_cnt++;
-                    pid = task_status[tid].first;
-                    progress(finished, pid, info);
-
-                    ps_set_size = predicate_index[pid - 1].first.size();
-                    po_set_size = predicate_index[pid - 1].second.size();
-                    _predicate_index_arrays_file_size += ps_set_size * 4 + po_set_size * 4;
-                    _ps_predicate_map_file_size += po_set_size * 3 * 4;
-                    _po_predicate_map_file_size += ps_set_size * 3 * 4;
-
-                    if (rank < _predicate_rank.size()) {
-                        pid = _predicate_rank[rank].first;
-                        task_status[tid] = {pid, 0};
-                        std::thread t(std::bind(&IndexBuilder::sub_build_predicate_index_task, this, pid,
-                                                &task_status[tid].second, &predicate_index[pid - 1]));
-                        t.detach();
-                        rank++;
-                    } else {
-                        task_status[tid] = {0, 0};
-                    }
-                }
-            }
-
-            usleep(10000);
-        }
-    }
-
-    void sub_build_predicate_index_task(uint pid, uint* finish, pair<entity_set, entity_set>* s_o_set) {
-        for (const auto& so : _pso[pid]) {
-            s_o_set->first.insert(so.first);
-            s_o_set->second.insert(so.second);
-        }
-
-        *finish = 1;
-    }
-
-    void store_predicate_index(std::vector<pair<entity_set, entity_set>>& predicate_index,
+    void store_predicate_index(std::vector<PredicateIndex>& predicate_indexes,
                                uint ps_predicate_map_size[],
                                uint po_predicate_map_size[]) {
         auto beg = std::chrono::high_resolution_clock::now();
@@ -383,11 +410,11 @@ class IndexBuilder {
             Virtual_Memory(_db_data_path + "PREDICATE_INDEX_ARRAYS", _predicate_index_arrays_file_size);
 
         uint predicate_index_arrays_file_offset = 0;
-        entity_set* ps_set;
-        entity_set* po_set;
+        phmap::btree_set<uint>* ps_set;
+        phmap::btree_set<uint>* po_set;
         for (uint pid = 1; pid <= _predicate_cnt; pid++) {
-            ps_set = &predicate_index[pid - 1].first;
-            po_set = &predicate_index[pid - 1].second;
+            ps_set = &predicate_indexes[pid - 1].s_set;
+            po_set = &predicate_indexes[pid - 1].o_set;
 
             _predicate_index[(pid - 1) * 4] = predicate_index_arrays_file_offset;
             // _predicate_index[(pid - 1) * 4 + 1] = ps_set->size();
@@ -404,6 +431,8 @@ class IndexBuilder {
                 _predicate_index_arrays[predicate_index_arrays_file_offset] = *it;
                 predicate_index_arrays_file_offset++;
             }
+
+            predicate_indexes[pid - 1].clear();
         }
 
         _predicate_index_arrays.close_vm();
@@ -413,9 +442,7 @@ class IndexBuilder {
         std::cout << "store predicate index takes " << diff.count() << " ms.               " << std::endl;
     }
 
-    void store_entity_index(uint ps_predicate_map_size[],
-                            uint po_predicate_map_size[],
-                            std::vector<std::pair<uint, uint>>& predicate_map_file_offset) {
+    void store_entity_index(uint ps_predicate_map_size[], uint po_predicate_map_size[]) {
         auto beg = std::chrono::high_resolution_clock::now();
 
         _entity_index_file_size = _entity_cnt * 4 * 4;
@@ -429,7 +456,7 @@ class IndexBuilder {
         for (uint id = 1; id <= _entity_cnt; id++) {
             cnt = po_predicate_map_size[id - 1];
             begin_offset = (id - 1) * 4;
-            predicate_map_file_offset[id - 1].first = offset;
+            _predicate_map_file_offset[id - 1].first = offset;
             // PS_PREDICATE_MAP offset and size
             _entity_index[begin_offset] = offset;
             _entity_index[begin_offset + 1] = cnt;
@@ -439,7 +466,7 @@ class IndexBuilder {
         for (uint id = 1; id <= _entity_cnt; id++) {
             cnt = ps_predicate_map_size[id - 1];
             begin_offset = (id - 1) * 4;
-            predicate_map_file_offset[id - 1].second = offset;
+            _predicate_map_file_offset[id - 1].second = offset;
             _entity_index[begin_offset + 2] = offset;
             _entity_index[begin_offset + 3] = cnt;
             offset += cnt * 3;
@@ -452,15 +479,80 @@ class IndexBuilder {
         std::cout << "store entity index takes " << diff.count() << " ms.               " << std::endl;
     }
 
-    void build_predicate_maps(std::vector<std::pair<uint, uint>>& predicate_map_file_offset) {
+    void build_predicate_maps() {
         auto beg = std::chrono::high_resolution_clock::now();
 
-        if (_threads != 1)
-            multi_thread_build_predicate_maps(predicate_map_file_offset);
-        else
-            single_thread_build_predicate_maps(predicate_map_file_offset);
+        _entity_index_arrays_file_size = _triplet_cnt * 2 * 4;
 
-        _predicate_index.close_vm();
+        _po_predicate_map = Virtual_Memory(_db_data_path + "PO_PREDICATE_MAP", _po_predicate_map_file_size);
+        _ps_predicate_map = Virtual_Memory(_db_data_path + "PS_PREDICATE_MAP", _ps_predicate_map_file_size);
+        _entity_index_arrays =
+            Virtual_Memory(_db_data_path + "ENTITY_INDEX_ARRAYS", _entity_index_arrays_file_size);
+
+        double finished = 0;
+        uint pid = 0;
+        std::string info = "building and storing predicate maps: ";
+        uint arrays_offset = 0;
+        if (_threads == 1) {
+            EntityIndex entity_index;
+
+            progress(finished, 0, info);
+            for (uint tid = 0; tid < _predicate_cnt; tid++) {
+                pid = _predicate_rank[tid].first;
+
+                entity_index.clear();
+                entity_index.build(_pso[pid]);
+
+                store_predicate_maps(arrays_offset, pid, entity_index);
+
+                flat_hash_set<pair<uint, uint>>{}.swap(_pso[pid]);
+                malloc_trim(0);
+
+                progress(finished, pid, info);
+            }
+        } else {
+            // [(pid, finish_flag) ,... ,(pid, finish_flag)]
+            std::vector<pair<uint, int>> task_status(_threads);
+            std::vector<EntityIndex> entity_indexes(_threads);
+
+            for (uint tid = 0; tid < _threads; tid++) {
+                pid = _predicate_rank[tid].first;
+                task_status[tid] = {pid, 0};
+                std::thread t(std::bind(&IndexBuilder::sub_build_predicate_maps, this, &task_status[tid],
+                                        &entity_indexes[tid]));
+                t.detach();
+            }
+
+            uint rank = _threads;
+            uint finish_cnt = 0;
+            progress(finished, 0, info);
+            while (finish_cnt < _predicate_cnt) {
+                for (uint tid = 0; tid < _threads; tid++) {
+                    if (task_status[tid].first != 0 && task_status[tid].second == 1) {
+                        finish_cnt++;
+                        pid = task_status[tid].first;
+                        progress(finished, pid, info);
+
+                        store_predicate_maps(arrays_offset, pid, entity_indexes[tid]);
+
+                        if (rank < _predicate_rank.size()) {
+                            pid = _predicate_rank[rank].first;
+                            task_status[tid] = {pid, 0};
+                            rank++;
+                        } else {
+                            task_status[tid] = {0, -1};
+                        }
+                    }
+                }
+
+                usleep(5000);
+            }
+            // finish = true;
+        }
+
+        _po_predicate_map.close_vm();
+        _ps_predicate_map.close_vm();
+        _entity_index_arrays.close_vm();
 
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> diff = end - beg;
@@ -468,138 +560,24 @@ class IndexBuilder {
                   << std::endl;
     }
 
-    void single_thread_build_predicate_maps(std::vector<std::pair<uint, uint>>& predicate_map_file_offset) {
-        _entity_index_arrays_file_size = _triplet_cnt * 2 * 4;
-
-        _po_predicate_map = Virtual_Memory(_db_data_path + "PO_PREDICATE_MAP", _po_predicate_map_file_size);
-        _ps_predicate_map = Virtual_Memory(_db_data_path + "PS_PREDICATE_MAP", _ps_predicate_map_file_size);
-        _entity_index_arrays =
-            Virtual_Memory(_db_data_path + "ENTITY_INDEX_ARRAYS", _entity_index_arrays_file_size);
-
-        // [(pid, finish_flag) ,... ,(pid, finish_flag)]
-        std::vector<pair<uint, uint>> task_status(_threads);
-        flat_hash_map<uint, Node> s_to_o;
-        flat_hash_map<uint, Node> o_to_s;
-
-        uint arrays_offset = 0;
+    void sub_build_predicate_maps(pair<uint, int>* task_status, EntityIndex* entity_index) {
         uint pid;
-        double finished = 0;
-        std::string info = "building and storing predicate maps: ";
-        progress(finished, 0, info);
-        for (uint tid = 0; tid < _predicate_cnt; tid++) {
-            pid = _predicate_rank[tid].first;
-
-            if (s_to_o.size() != 0) {
-                flat_hash_map<uint, Node>().swap(s_to_o);
-            }
-            if (o_to_s.size() != 0) {
-                flat_hash_map<uint, Node>().swap(o_to_s);
-            }
-
-            for (const auto& so : _pso[pid]) {
-                add_by_order(&s_to_o[so.first], so.second);
-                add_by_order(&o_to_s[so.second], so.first);
-            }
-
-            store_predicate_maps(arrays_offset, pid, s_to_o, o_to_s, predicate_map_file_offset);
+        while (task_status->second != -1) {
+            pid = task_status->first;
+            entity_index->clear();
+            entity_index->build(_pso[pid]);
 
             flat_hash_set<pair<uint, uint>>{}.swap(_pso[pid]);
             malloc_trim(0);
 
-            progress(finished, pid, info);
-        }
-
-        _ps_predicate_map.close_vm();
-        _po_predicate_map.close_vm();
-        _entity_index_arrays.close_vm();
-    }
-
-    void multi_thread_build_predicate_maps(std::vector<std::pair<uint, uint>>& predicate_map_file_offset) {
-        _entity_index_arrays_file_size = _triplet_cnt * 2 * 4;
-
-        _po_predicate_map = Virtual_Memory(_db_data_path + "PO_PREDICATE_MAP", _po_predicate_map_file_size);
-        _ps_predicate_map = Virtual_Memory(_db_data_path + "PS_PREDICATE_MAP", _ps_predicate_map_file_size);
-        _entity_index_arrays =
-            Virtual_Memory(_db_data_path + "ENTITY_INDEX_ARRAYS", _entity_index_arrays_file_size);
-
-        // [(pid, finish_flag) ,... ,(pid, finish_flag)]
-        std::vector<pair<uint, uint>> task_status(_threads);
-        std::vector<flat_hash_map<uint, Node>> s_to_o(_threads);
-        std::vector<flat_hash_map<uint, Node>> o_to_s(_threads);
-
-        uint pid = 0;
-        for (uint tid = 0; tid < _threads; tid++) {
-            pid = _predicate_rank[tid].first;
-            task_status[tid] = {pid, 0};
-            std::thread t(std::bind(&IndexBuilder::sub_build_predicate_maps, this, pid,
-                                    &task_status[tid].second, &s_to_o[tid], &o_to_s[tid]));
-            t.detach();
-        }
-
-        uint arrays_offset = 0;
-        uint rank = _threads;
-        uint finish_cnt = 0;
-        double finished = 0;
-        std::string info = "building and storing predicate maps: ";
-        progress(finished, 0, info);
-        while (finish_cnt < _predicate_cnt) {
-            for (uint tid = 0; tid < _threads; tid++) {
-                if (task_status[tid].first != 0 && task_status[tid].second == 1) {
-                    finish_cnt++;
-                    pid = task_status[tid].first;
-                    progress(finished, pid, info);
-
-                    store_predicate_maps(arrays_offset, pid, s_to_o[tid], o_to_s[tid],
-                                         predicate_map_file_offset);
-
-                    if (rank < _predicate_rank.size()) {
-                        pid = _predicate_rank[rank].first;
-                        task_status[tid] = {pid, 0};
-                        std::thread t(std::bind(&IndexBuilder::sub_build_predicate_maps, this, pid,
-                                                &task_status[tid].second, &s_to_o[tid], &o_to_s[tid]));
-                        t.detach();
-                        rank++;
-                    } else {
-                        task_status[tid] = {0, 0};
-                    }
-                }
+            task_status->second = 1;
+            while (task_status->second == 1) {
+                usleep(5000);
             }
-
-            usleep(5000);
         }
-
-        _po_predicate_map.close_vm();
-        _ps_predicate_map.close_vm();
-        _entity_index_arrays.close_vm();
     }
 
-    void sub_build_predicate_maps(uint pid,
-                                  uint* finish,
-                                  flat_hash_map<uint, Node>* p_s_to_o,
-                                  flat_hash_map<uint, Node>* p_o_to_s) {
-        if (p_s_to_o->size() != 0) {
-            flat_hash_map<uint, Node>().swap(*p_s_to_o);
-        }
-        if (p_o_to_s->size() != 0) {
-            flat_hash_map<uint, Node>().swap(*p_o_to_s);
-        }
-
-        for (const auto& so : _pso[pid]) {
-            add_by_order(&p_s_to_o->operator[](so.first), so.second);
-            add_by_order(&p_o_to_s->operator[](so.second), so.first);
-        }
-
-        flat_hash_set<pair<uint, uint>>{}.swap(_pso[pid]);
-        malloc_trim(0);
-
-        *finish = 1;
-    }
-
-    void store_predicate_maps(uint& arrays_offset,
-                              uint pid,
-                              flat_hash_map<uint, Node>& s_to_o,
-                              flat_hash_map<uint, Node>& o_to_s,
-                              std::vector<std::pair<uint, uint>>& predicate_map_file_offset) {
+    void store_predicate_maps(uint& arrays_offset, uint pid, EntityIndex& entity_index) {
         Node* current_node;
         uint size = 0;
         uint sid = 0;
@@ -611,12 +589,12 @@ class IndexBuilder {
         uint s_arrays_size_sum = 0;
         FloatInt fi;
 
-        for (auto it = s_to_o.begin(); it != s_to_o.end(); it++) {
+        for (auto it = entity_index.s_to_o.begin(); it != entity_index.s_to_o.end(); it++) {
             current_node = &it->second;
             if (current_node->nums.size()) {
                 size = 0;
                 sid = it->first;
-                array_offset = predicate_map_file_offset[sid - 1].first;
+                array_offset = _predicate_map_file_offset[sid - 1].first;
                 _po_predicate_map[array_offset] = pid;
                 array_offset++;
                 _po_predicate_map[array_offset] = arrays_offset;
@@ -632,7 +610,7 @@ class IndexBuilder {
                 }
                 _po_predicate_map[array_offset] = size;
                 array_offset++;
-                predicate_map_file_offset[sid - 1].first = array_offset;
+                _predicate_map_file_offset[sid - 1].first = array_offset;
 
                 o_arrays_size_sum += size;
             }
@@ -641,12 +619,12 @@ class IndexBuilder {
         fi.f = o_arrays_size_sum * 1.0 / s_cnt;
         _predicate_index[(pid - 1) * 4 + 1] = fi.i;
 
-        for (auto it = o_to_s.begin(); it != o_to_s.end(); it++) {
+        for (auto it = entity_index.o_to_s.begin(); it != entity_index.o_to_s.end(); it++) {
             current_node = &it->second;
             if (current_node->nums.size()) {
                 size = 0;
                 oid = it->first;
-                array_offset = predicate_map_file_offset[oid - 1].second;
+                array_offset = _predicate_map_file_offset[oid - 1].second;
                 _ps_predicate_map[array_offset] = pid;
                 array_offset++;
                 _ps_predicate_map[array_offset] = arrays_offset;
@@ -662,7 +640,7 @@ class IndexBuilder {
                 }
                 _ps_predicate_map[array_offset] = size;
                 array_offset++;
-                predicate_map_file_offset[oid - 1].second = array_offset;
+                _predicate_map_file_offset[oid - 1].second = array_offset;
 
                 s_arrays_size_sum += size;
             }
