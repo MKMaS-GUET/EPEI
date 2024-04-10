@@ -11,6 +11,7 @@
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <mutex>
 #include <queue>
 #include <string>
 #include <thread>
@@ -101,7 +102,7 @@ struct PredicateIndex {
     phmap::btree_set<uint> s_set;
     phmap::btree_set<uint> o_set;
 
-    void build(flat_hash_set<pair<uint, uint>>& so_pairs) {
+    void build(std::vector<pair<uint, uint>>& so_pairs) {
         for (const auto& so : so_pairs) {
             s_set.insert(so.first);
             o_set.insert(so.second);
@@ -119,7 +120,7 @@ struct EntityIndex {
     flat_hash_map<uint, Node> s_to_o;
     flat_hash_map<uint, Node> o_to_s;
 
-    void build(flat_hash_set<pair<uint, uint>>& so_pairs) {
+    void build(std::vector<pair<uint, uint>>& so_pairs) {
         for (const auto& so : so_pairs) {
             s_to_o[so.first].add_by_order(so.second);
             o_to_s[so.second].add_by_order(so.first);
@@ -136,7 +137,7 @@ class IndexBuilder {
     std::string _data_file;
     std::string _db_data_path;
     std::string _db_name;
-    uint _threads = 3;
+    uint _threads = 2;
 
     Virtual_Memory _predicate_index;
     Virtual_Memory _predicate_index_arrays;
@@ -156,9 +157,11 @@ class IndexBuilder {
     uint _entity_cnt = 0;
     uint _predicate_cnt = 0;
 
+    std::mutex mtx;
+
     std::vector<pair<uint, uint>> _predicate_rank;
 
-    flat_hash_map<uint, flat_hash_set<pair<uint, uint>>> _pso;
+    flat_hash_map<uint, std::vector<pair<uint, uint>>> _pso;
 
     std::vector<std::pair<uint, uint>> _predicate_map_file_offset;
 
@@ -271,7 +274,7 @@ class IndexBuilder {
                 entity_outs[oid % 4].write(o.c_str(), static_cast<long>(o.size()));
             }
 
-            _pso[pid].insert(std::make_pair(sid, oid));
+            _pso[pid].push_back(std::make_pair(sid, oid));
 
             if (_triplet_cnt % 100000 == 0) {
                 std::cout << _triplet_cnt << " triplet(s) have been loaded.\r";
@@ -288,10 +291,8 @@ class IndexBuilder {
         for (int i = 0; i < 4; i++)
             entity_outs[i].close();
 
-        std::thread t([&]() {
-            flat_hash_map<std::string, uint>().swap(entity2id);
-            malloc_trim(0);
-        });
+        flat_hash_map<std::string, uint>().swap(entity2id);
+        std::thread t([&]() { malloc_trim(0); });
         t.detach();
 
         auto end = std::chrono::high_resolution_clock::now();
@@ -301,6 +302,7 @@ class IndexBuilder {
 
     void calculate_predicate_rank() {
         for (uint pid = 1; pid <= _predicate_cnt; pid++) {
+            _pso[pid].shrink_to_fit();
             uint i = 0;
             for (; i < _predicate_rank.size(); i++) {
                 if (_predicate_rank[i].second <= _pso[pid].size())
@@ -333,43 +335,17 @@ class IndexBuilder {
                 progress(finished, pid, info);
             }
         } else {
-            // -1: all tasks finished
-            //  0: task unfinished
-            //  1: task finished
-            std::vector<pair<uint, int>> task_status(_threads);
-
-            for (uint tid = 0; tid < _threads; tid++) {
-                pid = _predicate_rank[tid].first;
-                task_status[tid] = {pid, 0};
-                std::thread t(std::bind(&IndexBuilder::sub_build_predicate_index_task, this,
-                                        &task_status[tid], &predicate_indexes));
-                t.detach();
+            std::queue<uint> task_queue;
+            for (uint i = 0; i < _predicate_cnt; i++) {
+                task_queue.push(_predicate_rank[i].first);
             }
-
-            uint rank = _threads;
-            uint finish_cnt = 0;
-            progress(finished, 0, info);
-            while (finish_cnt < _predicate_cnt) {
-                for (uint tid = 0; tid < _threads; tid++) {
-                    if (task_status[tid].first != 0 && task_status[tid].second == 1) {
-                        finish_cnt++;
-                        pid = task_status[tid].first;
-                        progress(finished, pid, info);
-
-                        update_file_size(predicate_indexes[pid - 1].s_set.size(),
-                                         predicate_indexes[pid - 1].o_set.size());
-
-                        if (rank < _predicate_rank.size()) {
-                            pid = _predicate_rank[rank].first;
-                            task_status[tid] = {pid, 0};
-                            rank++;
-                        } else {
-                            task_status[tid] = {0, -1};
-                        }
-                    }
-                }
-
-                usleep(10000);
+            std::vector<std::thread> threads;
+            for (uint tid = 0; tid < _threads; tid++) {
+                threads.emplace_back(std::bind(&IndexBuilder::sub_build_predicate_index, this, &task_queue,
+                                               &predicate_indexes, &finished, &info));
+            }
+            for (auto& t : threads) {
+                t.join();
             }
         }
 
@@ -384,17 +360,24 @@ class IndexBuilder {
         _po_predicate_map_file_size += ps_set_size * 3 * 4;
     }
 
-    void sub_build_predicate_index_task(pair<uint, int>* task_status,
-                                        std::vector<PredicateIndex>* predicate_indexes) {
+    void sub_build_predicate_index(std::queue<uint>* task_queue,
+                                   std::vector<PredicateIndex>* predicate_indexes,
+                                   double* finished,
+                                   std::string* info) {
         uint pid;
-        while (task_status->second != -1) {
-            pid = task_status->first;
+        while (task_queue->size()) {
+            mtx.lock();
+            pid = task_queue->front();
+            task_queue->pop();
+            mtx.unlock();
+
             predicate_indexes->at(pid - 1).build(_pso[pid]);
 
-            task_status->second = 1;
-            while (task_status->second == 1) {
-                usleep(5000);
-            }
+            mtx.lock();
+            update_file_size(predicate_indexes->at(pid - 1).s_set.size(),
+                             predicate_indexes->at(pid - 1).o_set.size());
+            progress(*finished, pid, *info);
+            mtx.unlock();
         }
     }
 
@@ -505,49 +488,25 @@ class IndexBuilder {
 
                 store_predicate_maps(arrays_offset, pid, entity_index);
 
-                flat_hash_set<pair<uint, uint>>{}.swap(_pso[pid]);
+                std::vector<pair<uint, uint>>{}.swap(_pso[pid]);
                 malloc_trim(0);
 
                 progress(finished, pid, info);
             }
         } else {
             // [(pid, finish_flag) ,... ,(pid, finish_flag)]
-            std::vector<pair<uint, int>> task_status(_threads);
-            std::vector<EntityIndex> entity_indexes(_threads);
-
+            std::queue<uint> task_queue;
+            for (uint i = 0; i < _predicate_cnt; i++) {
+                task_queue.push(_predicate_rank[i].first);
+            }
+            std::vector<std::thread> threads;
             for (uint tid = 0; tid < _threads; tid++) {
-                pid = _predicate_rank[tid].first;
-                task_status[tid] = {pid, 0};
-                std::thread t(std::bind(&IndexBuilder::sub_build_predicate_maps, this, &task_status[tid],
-                                        &entity_indexes[tid]));
-                t.detach();
+                threads.emplace_back(std::bind(&IndexBuilder::sub_build_predicate_maps, this, &task_queue,
+                                               &arrays_offset, &finished, &info));
             }
-
-            uint rank = _threads;
-            uint finish_cnt = 0;
-            progress(finished, 0, info);
-            while (finish_cnt < _predicate_cnt) {
-                for (uint tid = 0; tid < _threads; tid++) {
-                    if (task_status[tid].first != 0 && task_status[tid].second == 1) {
-                        finish_cnt++;
-                        pid = task_status[tid].first;
-                        progress(finished, pid, info);
-
-                        store_predicate_maps(arrays_offset, pid, entity_indexes[tid]);
-
-                        if (rank < _predicate_rank.size()) {
-                            pid = _predicate_rank[rank].first;
-                            task_status[tid] = {pid, 0};
-                            rank++;
-                        } else {
-                            task_status[tid] = {0, -1};
-                        }
-                    }
-                }
-
-                usleep(5000);
+            for (auto& t : threads) {
+                t.join();
             }
-            // finish = true;
         }
 
         _po_predicate_map.close_vm();
@@ -560,20 +519,27 @@ class IndexBuilder {
                   << std::endl;
     }
 
-    void sub_build_predicate_maps(pair<uint, int>* task_status, EntityIndex* entity_index) {
+    void sub_build_predicate_maps(std::queue<uint>* task_queue,
+                                  uint* arrays_offset,
+                                  double* finished,
+                                  std::string* info) {
         uint pid;
-        while (task_status->second != -1) {
-            pid = task_status->first;
-            entity_index->clear();
-            entity_index->build(_pso[pid]);
+        while (task_queue->size()) {
+            mtx.lock();
+            pid = task_queue->front();
+            task_queue->pop();
+            mtx.unlock();
 
-            flat_hash_set<pair<uint, uint>>{}.swap(_pso[pid]);
+            EntityIndex entity_index = EntityIndex();
+            entity_index.build(_pso[pid]);
+
+            mtx.lock();
+            store_predicate_maps(*arrays_offset, pid, entity_index);
+            progress(*finished, pid, *info);
+            mtx.unlock();
+
+            std::vector<pair<uint, uint>>{}.swap(_pso[pid]);
             malloc_trim(0);
-
-            task_status->second = 1;
-            while (task_status->second == 1) {
-                usleep(5000);
-            }
         }
     }
 
@@ -697,10 +663,7 @@ class IndexBuilder {
 
         std::cout << info << finished * 100 << "%    \r";
         std::cout.flush();
-        // std::cout << info << finished * 100 << std::endl;
     }
-
-    // munmap(data, file_size);
 };
 
 #endif
