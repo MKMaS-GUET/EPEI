@@ -1,14 +1,7 @@
-/*
- * @FileName   : leapfrog_triejoin.hpp
- * @CreateAt   : 2022/10/15
- * @Author     : Inno Fang
- * @Email      : innofang@yeah.net
- * @Description:
- */
-
 #ifndef QUERY_EXECUTOR_HPP
 #define QUERY_EXECUTOR_HPP
 
+#include <parallel_hashmap/phmap.h>
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -18,17 +11,10 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <parallel_hashmap/phmap.h>
-
 #include "../store/index.hpp"
 #include "../tools/thread_pool.hpp"
 #include "leapfrog_join.hpp"
 #include "query_plan.hpp"
-
-#include "result_vector_list.hpp"
-
-using namespace std::chrono;
 
 struct Stat {
    public:
@@ -83,57 +69,6 @@ class QueryExecutor {
           _p_query_plan(p_query_plan),
           _prestore_result(p_query_plan->prestore_result) {}
 
-    // void parallel_query() {
-    //     _query_begin_time = std::chrono::high_resolution_clock::now();
-
-    //     down(_stat);
-
-    //     BS::thread_pool pool;
-    //     std::vector<std::future<std::vector<std::vector<uint>>>> futures;
-    //     futures.reserve(_stat.candidate_result[0]->size());
-    //     for (; !_stat.at_end; next(_stat)) {
-    //         futures.push_back(pool.submit([this]() {
-    //             Stat stat = _stat;
-    //             return this->sub_query_task(stat);
-    //         }));
-    //     }
-
-    //     for (auto& t : futures) {
-    //         auto item = t.get();
-    //         if (!item.empty()) {
-    //             _stat.result.insert(_stat.result.end(), item.begin(), item.end());
-    //             if (_stat.result.size() >= _p_query_plan->limit) {
-    //                 pool.purge();
-    //                 pool.wait_for_tasks();
-    //                 break;
-    //             }
-    //         }
-    //     }
-
-    //     _query_end_time = std::chrono::high_resolution_clock::now();
-    // }
-
-    // std::vector<std::vector<uint>> sub_query_task(Stat& stat) {
-    //     for (;;) {
-    //         if (stat.at_end) {
-    //             // different with query
-    //             if (stat.level == 1) {
-    //                 break;
-    //             }
-    //             up(stat);
-    //             next(stat);
-    //         } else {
-    //             if (stat.level == int(stat.plan.size() - 1)) {
-    //                 stat.result.push_back(stat.current_tuple);
-    //                 next(stat);
-    //             } else {
-    //                 down(stat);
-    //             }
-    //         }
-    //     }
-    //     return stat.result;
-    // }
-
     void query() {
         _query_begin_time = std::chrono::high_resolution_clock::now();
         // _stat.level 相当于 _query_plan 的索引，即变量的优先级顺序 id
@@ -173,7 +108,7 @@ class QueryExecutor {
 
    private:
     bool pre_join() {
-        ResultVectorList result_Vector_list;
+        ResultList result_list;
         std::stringstream key;
         for (long unsigned int level = 1; level < _stat.plan.size(); level++) {
             // for (long unsigned int i = 0; i < _prestore_result[level].size(); i++) {
@@ -192,15 +127,15 @@ class QueryExecutor {
 
             for (long unsigned int i = 0; i < _stat.plan[level].size(); i++) {
                 if (_stat.plan[level][i].search_type != QueryPlan::Item::Type_T::None) {
-                    key << _stat.plan[level][i].search_range->id;
+                    key << _stat.plan[level][i].search_result->id;
                     key << "_";
-                    result_Vector_list.add_vector(_stat.plan[level][i].search_range);
+                    result_list.add_vector(_stat.plan[level][i].search_result);
                 }
             }
-            if (result_Vector_list.size() > 1) {
-                _pre_join_result[key.str()] = leapfrog_join(result_Vector_list);
+            if (result_list.size() > 1) {
+                _pre_join_result[key.str()] = leapfrog_join(result_list);
             }
-            result_Vector_list.clear();
+            result_list.clear();
             key.str("");
         }
         return true;
@@ -231,17 +166,11 @@ class QueryExecutor {
     }
 
     void up(Stat& stat) {
-        if (stat.level > 0) {
-            //            stat.current_tuple.pop_back();
-        }
-
         // 清除较高 level 的查询结果
         stat.candidate_result[stat.level]->clear();
         stat.indices[stat.level] = 0;
 
         --stat.level;
-
-        // sleep(2);
     }
 
     void next(Stat& stat) {
@@ -256,20 +185,17 @@ class QueryExecutor {
     void enumerate_items(Stat& stat) {
         // 每一层可能有
         // 1.单变量三元组的查询结果，存储在 _prestore_result 中，
-        // 2.双变量三元组的 none 类型的 item，查询结果search_range在之前的层数被填充在 plan 中，
+        // 2.双变量三元组的 none 类型的 item，查询结果search_result在之前的层数被填充在 plan 中，
         // 3.双变量三元组的非 none 类型的 item
 
-        const auto& item_none_type_indices = _p_query_plan->none_type_indices[stat.level];
-        const auto& item_other_type_indices = _p_query_plan->other_type_indices[stat.level];
-
-        ResultVectorList result_Vector_list;
+        ResultList result_list;
 
         // _prestore_result 是 (?s p o) 和 (?s p o) 的查询结果
         if (!_prestore_result[stat.level].empty()) {
             // join item for none type
             // 如果有此变量（level）在单变量三元组中，且有查询结果，
             // 就将此变量在所有三元组中的查询结果插入到查询结果列表的末尾
-            if (!result_Vector_list.add_vectors(_prestore_result[stat.level])) {
+            if (!result_list.add_vectors(_prestore_result[stat.level])) {
                 stat.at_end = true;
                 return;
             }
@@ -277,18 +203,19 @@ class QueryExecutor {
 
         // none 类型已经在之前的层数的时候就已经填补上了查询范围，
         // 而且 none 类型不可能在第 0 层
-        for (const auto& idx : item_none_type_indices) {
+        for (const auto& idx : _p_query_plan->none_type_indices[stat.level]) {
             // 将 none 类型的 item（查询结果）放入查询列表中
-            result_Vector_list.add_vector(stat.plan[stat.level][idx].search_range);
+            result_list.add_vector(stat.plan[stat.level][idx].search_result);
         }
 
-        uint join_case = result_Vector_list.size();
+        const auto& item_other_type_indices = _p_query_plan->other_type_indices[stat.level];
+        uint join_case = result_list.size();
         if (join_case == 0) {
             if (_pre_join_result.size() != 0) {
                 std::stringstream key_stream;
                 for (const auto& idx : item_other_type_indices) {
                     if (_pre_join_result.size() != 0) {
-                        key_stream << stat.plan[stat.level][idx].search_range->id;
+                        key_stream << stat.plan[stat.level][idx].search_result->id;
                         key_stream << "_";
                     }
                 }
@@ -297,7 +224,7 @@ class QueryExecutor {
                 auto it = _pre_join_result.find(key);
                 if (it == _pre_join_result.end()) {
                     for (const auto& idx : item_other_type_indices) {
-                        result_Vector_list.add_vector(stat.plan[stat.level][idx].search_range);
+                        result_list.add_vector(stat.plan[stat.level][idx].search_result);
                     }
                 } else {
                     stat.candidate_result[stat.level]->reserve(it->second->size());
@@ -308,22 +235,24 @@ class QueryExecutor {
                 }
             } else {
                 for (const auto& idx : item_other_type_indices) {
-                    result_Vector_list.add_vector(stat.plan[stat.level][idx].search_range);
+                    result_list.add_vector(stat.plan[stat.level][idx].search_result);
                 }
             }
-            // result_Vector_list.sizes();
-            stat.candidate_result[stat.level] = leapfrog_join(result_Vector_list);
+            stat.candidate_result[stat.level] = leapfrog_join(result_list);
         }
         if (join_case == 1) {
             // for (const auto& idx : item_other_type_indices) {
-            //     result_Vector_list.add_vector(stat.plan[stat.level][idx].search_range);
+            //     result_list.add_vector(stat.plan[stat.level][idx].search_result);
             // }
             // stat.candidate_result[stat.level] = leapfrog_join(result_Vector_list);
-            std::shared_ptr<ResultVector> range = result_Vector_list.get_range_by_index(0);
-            stat.candidate_result[stat.level] = std::make_shared<std::vector<uint>>(range->result);
+            std::shared_ptr<Result> range = result_list.get_range_by_index(0);
+            stat.candidate_result[stat.level] = std::make_shared<std::vector<uint>>();
+            for (uint i = 0; i < range->size(); i++) {
+                stat.candidate_result[stat.level]->push_back(range->operator[](i));
+            }
         }
         if (join_case > 1) {
-            stat.candidate_result[stat.level] = leapfrog_join(result_Vector_list);
+            stat.candidate_result[stat.level] = leapfrog_join(result_list);
         }
 
         // 变量的交集为空
@@ -372,12 +301,10 @@ class QueryExecutor {
     }
 
     bool search_predicate_path(Stat& stat, uint64_t entity) {
-
         bool match = true;
         // 遍历一个变量（level）的在所有三元组中的查询结果
         for (auto& item : stat.plan[stat.level]) {
             if (item.search_type == QueryPlan::Item::Type_T::PS) {
-
                 size_t other = item.candidate_result_idx;
 
                 // 遍历当前三元组none所在的level
@@ -387,8 +314,8 @@ class QueryExecutor {
                         continue;
                     }
 
-                    other_item.search_range = _p_index->get_by_po(item.search_code, entity);
-                    if (other_item.search_range->result.size() == 0) {
+                    other_item.search_result = _p_index->get_by_po(item.search_code, entity);
+                    if (other_item.search_result->size() == 0) {
                         match = false;
                     }
 
@@ -402,9 +329,9 @@ class QueryExecutor {
                         continue;
                     }
 
-                    std::shared_ptr<ResultVector> rv = _p_index->get_by_ps(item.search_code, entity);
-                    other_item.search_range = rv;
-                    if (other_item.search_range->result.size() == 0) {
+                    std::shared_ptr<Result> rv = _p_index->get_by_ps(item.search_code, entity);
+                    other_item.search_result = rv;
+                    if (other_item.search_result->size() == 0) {
                         match = false;
                     }
 
@@ -412,7 +339,6 @@ class QueryExecutor {
                 }
             }
         }
-
         return match;
     }
 
@@ -420,7 +346,7 @@ class QueryExecutor {
     Stat _stat;
     std::shared_ptr<Index> _p_index;
     std::shared_ptr<QueryPlan> _p_query_plan;
-    std::vector<std::vector<std::shared_ptr<ResultVector>>> _prestore_result;
+    std::vector<std::vector<std::shared_ptr<Result>>> _prestore_result;
     std::chrono::system_clock::time_point _query_begin_time, _query_end_time;
 
     phmap::flat_hash_map<std::string, std::shared_ptr<std::vector<uint>>> _pre_join_result;

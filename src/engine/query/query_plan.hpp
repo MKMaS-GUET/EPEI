@@ -9,7 +9,7 @@
 
 #include "../store/index.hpp"
 #include "leapfrog_join.hpp"
-#include "result_vector_list.hpp"
+
 
 using AdjacencyList = phmap::flat_hash_map<std::string, std::vector<std::pair<std::string, uint>>>;
 
@@ -27,7 +27,7 @@ class QueryPlan {
         // 一对迭代器，第一个是起始位置，第二个是结束位置
         // std::pair<Entity_Tree_Iterator, Entity_Tree_Iterator>
         //     search_range;  // the range of current search
-        std::shared_ptr<ResultVector> search_range;
+        std::shared_ptr<Result> search_result;
 
         Item() = default;
 
@@ -35,14 +35,14 @@ class QueryPlan {
             : search_type(other.search_type),
               search_code(other.search_code),
               candidate_result_idx(other.candidate_result_idx),
-              search_range(other.search_range) {}
+              search_result(other.search_result) {}
 
         Item& operator=(const Item& other) {
             if (this != &other) {
                 search_type = other.search_type;
                 search_code = other.search_code;
                 candidate_result_idx = other.candidate_result_idx;
-                search_range = other.search_range;
+                search_result = other.search_result;
             }
             return *this;
         }
@@ -356,7 +356,6 @@ class QueryPlan {
     void gen_plan_table(const std::shared_ptr<Index>& index,
                         const std::vector<std::vector<std::string>>& triple_list,
                         std::vector<std::string>& variables) {
-
         for (size_t i = 0; i < variables.size(); ++i) {
             _variable2idx[variables[i]] = i;
             if (debug)
@@ -395,8 +394,8 @@ class QueryPlan {
                     item.search_code = index->predicate2id[p];
                     // 下一步应该查询的变量的索引
                     item.candidate_result_idx = var_oid;
-                    item.search_range = index->get_s_set(item.search_code);
-                    item.search_range->id = range_cnt;
+                    item.search_result = index->get_s_set(item.search_code);
+                    item.search_result->id = range_cnt;
                     range_cnt += 1;
                     _query_plan[var_sid].push_back(item);
                     // 非 none 的 item 的索引
@@ -407,8 +406,8 @@ class QueryPlan {
                     candidate_result_item.search_type = Item::Type_T::None;
                     candidate_result_item.search_code = item.search_code;  // don't have the search code
                     candidate_result_item.candidate_result_idx = 0;        // don't have the candidate result
-                    candidate_result_item.search_range =
-                        std::make_shared<ResultVector>();  // initialize search range state
+                    candidate_result_item.search_result =
+                        std::make_shared<Result>();  // initialize search range state
                     _query_plan[var_oid].push_back(candidate_result_item);
                     // none item 的索引
                     none_type_indices[var_oid].push_back(_query_plan[var_oid].size() - 1);
@@ -416,8 +415,8 @@ class QueryPlan {
                     item.search_code = index->predicate2id[p];
                     item.search_type = Item::Type_T::PS;
                     item.candidate_result_idx = var_sid;
-                    item.search_range = index->get_o_set(item.search_code);
-                    item.search_range->id = range_cnt;
+                    item.search_result = index->get_o_set(item.search_code);
+                    item.search_result->id = range_cnt;
                     range_cnt += 1;
                     _query_plan[var_oid].push_back(item);
                     other_type_indices[var_oid].push_back(_query_plan[var_oid].size() - 1);
@@ -425,8 +424,8 @@ class QueryPlan {
                     candidate_result_item.search_type = Item::Type_T::None;
                     candidate_result_item.search_code = item.search_code;  // don't have the search code
                     candidate_result_item.candidate_result_idx = 0;        // don't have the candidate result
-                    candidate_result_item.search_range =
-                        std::make_shared<ResultVector>();  // initialize search range state
+                    candidate_result_item.search_result =
+                        std::make_shared<Result>();  // initialize search range state
                     _query_plan[var_sid].push_back(candidate_result_item);
                     none_type_indices[var_sid].push_back(_query_plan[var_sid].size() - 1);
                 }
@@ -435,8 +434,7 @@ class QueryPlan {
             else if (s[0] == '?') {
                 uint oid = index->get_entity_id(o);
                 uint pid = index->predicate2id[p];
-                std::shared_ptr<ResultVector> r = index->get_by_po(pid, oid);
-                // std::shared_ptr<ResultVector> r = single_variable_triple_results[p + "_" + o];
+                std::shared_ptr<Result> r = index->get_by_po(pid, oid);
                 r->id = range_cnt;
                 prestore_result[var_sid].push_back(r);
                 range_cnt++;
@@ -445,8 +443,7 @@ class QueryPlan {
             else if (o[0] == '?') {
                 uint sid = index->get_entity_id(s);
                 uint pid = index->predicate2id[p];
-                std::shared_ptr<ResultVector> r = index->get_by_ps(pid, sid);
-                // std::shared_ptr<ResultVector> r = single_variable_triple_results[p + "_" + s];
+                std::shared_ptr<Result> r = index->get_by_ps(pid, sid);
                 r->id = range_cnt;
                 prestore_result[var_oid].push_back(r);
                 range_cnt++;
@@ -461,7 +458,7 @@ class QueryPlan {
 
                 for (int i = 0; i < int(prestore_result[level].size()); i++) {
                     std::cout << "[";
-                    std::cout << prestore_result[level][i]->result.size();
+                    std::cout << prestore_result[level][i]->size();
 
                     // std::for_each(
                     //     _prestore_result[level][i].first, _prestore_result[level][i].second,
@@ -478,8 +475,8 @@ class QueryPlan {
             for (int i = 0; i < int(_query_plan.size()); i++) {
                 for (int j = 0; j < int(_query_plan[i].size()); j++) {
                     Item item = _query_plan[i][j];
-                    std::cout << item.search_range->id << " [";
-                    std::cout << item.search_range->result.size();
+                    std::cout << item.search_result->id << " [";
+                    std::cout << item.search_result->size();
                     std::cout << "] ";
                 }
                 std::cout << std::endl;
@@ -512,7 +509,7 @@ class QueryPlan {
     size_t limit;
     std::vector<std::vector<size_t>> other_type_indices;
     std::vector<std::vector<size_t>> none_type_indices;
-    std::vector<std::vector<std::shared_ptr<ResultVector>>> prestore_result;
+    std::vector<std::vector<std::shared_ptr<Result>>> prestore_result;
 
    private:
     bool debug = false;

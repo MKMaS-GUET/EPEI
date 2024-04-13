@@ -11,7 +11,7 @@ union FloatInt {
     unsigned int i;
 };
 
-class Virtual_Memory {
+class VirtualMemory {
     uint* _vm;
     int _fd;
     std::string _path;
@@ -39,9 +39,9 @@ class Virtual_Memory {
     }
 
    public:
-    Virtual_Memory() {}
+    VirtualMemory() {}
 
-    Virtual_Memory(std::string path, uint file_size) : _path(path), _file_size(file_size) {
+    VirtualMemory(std::string path, uint file_size) : _path(path), _file_size(file_size) {
         new_virtual_mem();
     }
 

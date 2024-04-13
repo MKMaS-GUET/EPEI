@@ -12,15 +12,11 @@
 #include <unistd.h>
 #include <algorithm>
 #include <vector>
-// #include "query_plan.hpp"
 
-#include "result_vector_list.hpp"
-
-void leapfrog_join(ResultVectorList& pair_begin_end, std::vector<uint>& result_set) {
+void leapfrog_join(ResultList& pair_begin_end, std::vector<uint>& result_set) {
     uint value;
 
     // Check if any index is empty => Intersection empty
-
     if (pair_begin_end.has_empty())
         return;
 
@@ -29,20 +25,10 @@ void leapfrog_join(ResultVectorList& pair_begin_end, std::vector<uint>& result_s
 
     //  max 是所有指针指向位置的最大值，初始的最大值就是对列表排序后，最后一个列表的第一个值
     size_t max = pair_begin_end.get_current_val_of_range(pair_begin_end.size() - 1);
-
     // 当前迭代器的 id
     size_t idx = 0;
 
-    // double tree_seek_time = 0;
-    // double vector_seek_time = 0;
-
-    // double get_current_val_time = 0;
-
     while (true) {
-        // if (pair_begin_end.Result_Vectors[2]->size() == 1) {
-        //     std::cout << "idx: " << idx << " max: " << max << std::endl;
-        //     sleep(1);
-        // }
         // 当前迭代器的第一个值
         value = pair_begin_end.get_current_val_of_range(idx);
 
@@ -69,7 +55,6 @@ void leapfrog_join(ResultVectorList& pair_begin_end, std::vector<uint>& result_s
         }
 
         // Store the maximum
-
         max = pair_begin_end.get_current_val_of_range(idx);
 
         idx++;
@@ -77,15 +62,22 @@ void leapfrog_join(ResultVectorList& pair_begin_end, std::vector<uint>& result_s
     }
 }
 
-std::shared_ptr<std::vector<uint>> leapfrog_join(ResultVectorList& indexes) {
+std::shared_ptr<std::vector<uint>> leapfrog_join(ResultList& indexes) {
     std::shared_ptr<std::vector<uint>> resultSet = std::make_shared<std::vector<uint>>();
 
-    // std::cout << "size: " << indexes.size() << std::endl;
     if (indexes.size() == 1) {
-        return std::make_shared<std::vector<uint>>(indexes.get_range_by_index(0)->result);
+        std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
+        for (uint i = 0; i < indexes.get_range_by_index(0)->size(); i++) {
+            result->push_back(indexes.get_range_by_index(0)->operator[](i));
+        }
+
+        return result;
     }
 
+    // indexes.sizes();
     leapfrog_join(indexes, *resultSet);
+    // std::cout << "resultSet: " << resultSet->size() << std::endl;
+    // sleep(1);
 
     return resultSet;
 }
