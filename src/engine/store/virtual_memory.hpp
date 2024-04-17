@@ -62,6 +62,15 @@ class VirtualMemory {
         }
     }
 
+    void resize(uint new_size) {
+        _file_size = new_size;
+        if (ftruncate(_fd, _file_size) == -1) {
+            perror("Error truncating file for mmap");
+            close(_fd);
+            exit(1);
+        }
+    }
+
     uint& operator[](uint index) {
         if (index >= 0 && index < _file_size / 4) {
             return _vm[index];

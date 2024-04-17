@@ -287,8 +287,13 @@ class Index {
     }
 
     std::shared_ptr<Result> get_by_ps(uint p, uint s) {
-        uint offset = _entity_index[(s - 1) * 4];
-        uint size = _entity_index[(s - 1) * 4 + 1];
+        uint offset = _entity_index[(s - 1) * 2];
+        uint size;
+        if (s != _entity_cnt - 1) {
+            size = (_entity_index[s * 2] - offset) / 3;
+        } else {
+            size = (_entity_index_file_size / 4 - offset) / 3;
+        }
 
         uint array_offset;
         uint array_size;
@@ -298,15 +303,26 @@ class Index {
             if (_po_predicate_map[offset + 3 * pos] == p) {
                 array_offset = _po_predicate_map[offset + 3 * pos + 1];
                 array_size = _po_predicate_map[offset + 3 * pos + 2];
-                return std::make_shared<Result>(&_entity_index_arrays[array_offset], array_size);
+                if (array_size != 1)
+                    return std::make_shared<Result>(&_entity_index_arrays[array_offset], array_size);
+                else {
+                    uint* data = (uint*)malloc(4);
+                    data[0] = array_offset;
+                    return std::make_shared<Result>(data, 1, true);
+                }
             }
         }
         return std::make_shared<Result>();
     }
 
     uint get_by_ps_size(uint p, uint s) {
-        uint offset = _entity_index[(s - 1) * 4];
-        uint size = _entity_index[(s - 1) * 4 + 1];
+        uint offset = _entity_index[(s - 1) * 2];
+        uint size;
+        if (s != _entity_cnt - 1) {
+            size = (_entity_index[s * 2] - offset) / 3;
+        } else {
+            size = (_entity_index_file_size / 4 - offset) / 3;
+        }
 
         for (uint i = 0; i < size; i++) {
             if (_po_predicate_map[offset + 3 * i] == p) {
@@ -317,8 +333,13 @@ class Index {
     }
 
     std::shared_ptr<Result> get_by_po(uint p, uint o) {
-        uint offset = _entity_index[(o - 1) * 4 + 2];
-        uint size = _entity_index[(o - 1) * 4 + 3];
+        uint offset = _entity_index[(o - 1) * 2 + 1];
+        uint size;
+        if (o != _entity_cnt - 1) {
+            size = (_entity_index[o * 2 + 1] - offset) / 3;
+        } else {
+            size = (_entity_index_file_size / 4 - offset) / 3;
+        }
 
         uint array_offset;
         uint array_size;
@@ -328,15 +349,26 @@ class Index {
             if (_ps_predicate_map[offset + 3 * pos] == p) {
                 array_offset = _ps_predicate_map[offset + 3 * pos + 1];
                 array_size = _ps_predicate_map[offset + 3 * pos + 2];
-                return std::make_shared<Result>(&_entity_index_arrays[array_offset], array_size);
+                if (array_size != 1) {
+                    return std::make_shared<Result>(&_entity_index_arrays[array_offset], array_size);
+                } else {
+                    uint* data = (uint*)malloc(4);
+                    data[0] = array_offset;
+                    return std::make_shared<Result>(data, 1, true);
+                }
             }
         }
         return std::make_shared<Result>();
     }
 
     uint get_by_po_size(uint p, uint o) {
-        uint offset = _entity_index[(o - 1) * 4 + 2];
-        uint size = _entity_index[(o - 1) * 4 + 3];
+        uint offset = _entity_index[(o - 1) * 2 + 1];
+        uint size;
+        if (o != _entity_cnt - 1) {
+            size = (_entity_index[o * 2 + 1] - offset) / 3;
+        } else {
+            size = (_entity_index_file_size / 4 - offset) / 3;
+        }
 
         for (uint i = 0; i < size; i++) {
             if (_ps_predicate_map[offset + 3 * i] == p) {

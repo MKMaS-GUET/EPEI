@@ -432,7 +432,8 @@ class IndexBuilder {
     void store_entity_index(uint ps_predicate_map_size[], uint po_predicate_map_size[]) {
         auto beg = std::chrono::high_resolution_clock::now();
 
-        _entity_index_file_size = _entity_cnt * 4 * 4;
+        // _entity_index_file_size = _entity_cnt * 4 * 4;
+        _entity_index_file_size = _entity_cnt * 2 * 4;
 
         _entity_index = VirtualMemory(_db_data_path + "ENTITY_INDEX", _entity_index_file_size);
 
@@ -442,20 +443,22 @@ class IndexBuilder {
         uint begin_offset = 0;
         for (uint id = 1; id <= _entity_cnt; id++) {
             cnt = po_predicate_map_size[id - 1];
-            begin_offset = (id - 1) * 4;
+            begin_offset = (id - 1) * 2;
             _predicate_map_file_offset[id - 1].first = offset;
             // PS_PREDICATE_MAP offset and size
             _entity_index[begin_offset] = offset;
-            _entity_index[begin_offset + 1] = cnt;
+            // _entity_index[begin_offset] = offset;
+            // _entity_index[begin_offset + 1] = cnt;
             offset += cnt * 3;
         }
         offset = 0;
         for (uint id = 1; id <= _entity_cnt; id++) {
             cnt = ps_predicate_map_size[id - 1];
-            begin_offset = (id - 1) * 4;
+            begin_offset = (id - 1) * 2;
             _predicate_map_file_offset[id - 1].second = offset;
-            _entity_index[begin_offset + 2] = offset;
-            _entity_index[begin_offset + 3] = cnt;
+            _entity_index[begin_offset + 1] = offset;
+            // _entity_index[begin_offset + 2] = offset;
+            // _entity_index[begin_offset + 3] = cnt;
             offset += cnt * 3;
         }
 
@@ -516,6 +519,10 @@ class IndexBuilder {
 
         _po_predicate_map.close_vm();
         _ps_predicate_map.close_vm();
+        if (_entity_index_arrays_file_size != arrays_offset) {
+            _entity_index_arrays_file_size = arrays_offset * 4;
+            _entity_index_arrays.resize(arrays_offset * 4);
+        }
         _entity_index_arrays.close_vm();
 
         auto end = std::chrono::high_resolution_clock::now();
@@ -583,25 +590,33 @@ class IndexBuilder {
                     size += current_node->nums.size();
                     current_node = current_node->next;
                 }
-                arrays_offset += size;
+                if (size != 1)
+                    arrays_offset += size;
                 mtx.unlock();
 
                 arrays_size_sum += size;
 
                 vm[map_offset] = pid;
                 map_offset++;
-                vm[map_offset] = arrays_start_offset;
-                map_offset++;
-                vm[map_offset] = size;
 
                 current_node = &it->second;
-                while (current_node) {
-                    for (long unsigned int i = 0; i < current_node->nums.size(); i++) {
-                        _entity_index_arrays[arrays_start_offset] = current_node->nums[i];
-                        arrays_start_offset++;
+                if (size != 1) {
+                    vm[map_offset] = arrays_start_offset;
+                    map_offset++;
+                    vm[map_offset] = size;
+
+                    while (current_node) {
+                        for (long unsigned int i = 0; i < current_node->nums.size(); i++) {
+                            _entity_index_arrays[arrays_start_offset] = current_node->nums[i];
+                            arrays_start_offset++;
+                        }
+                        current_node->nums.clear();
+                        current_node = current_node->next;
                     }
-                    current_node->nums.clear();
-                    current_node = current_node->next;
+                } else {
+                    vm[map_offset] = current_node->nums[0];
+                    map_offset++;
+                    vm[map_offset] = 1;
                 }
             }
             e_cnt += 1;

@@ -20,7 +20,7 @@ class Result {
     Result(uint* start, uint size, bool in_mem) : _start(start), _size(size), _in_mem(in_mem) {}
 
     ~Result() {
-        if (_in_mem) {
+        if (_in_mem && _start) {
             delete[] _start;  // 释放数组
             _start = nullptr;
         }
