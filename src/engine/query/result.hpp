@@ -43,6 +43,7 @@ class Result {
             operator++();
             return tmp;
         }
+        uint operator-(Result::Iterator r_it) { return ptr - r_it.ptr; }
         Iterator operator-(int num) { return Iterator(ptr - num); }
         Iterator operator+(int num) { return Iterator(ptr + num); }
         bool operator==(const Iterator& rhs) const { return ptr == rhs.ptr; }
@@ -66,7 +67,7 @@ class Result {
 class ResultList {
     std::vector<std::shared_ptr<Result>> results;
 
-    phmap::flat_hash_map<int, Result::Iterator> vector_current_pos;
+    std::vector<Result::Iterator> vector_current_pos;
 
    public:
     void clear() {
@@ -84,9 +85,7 @@ class ResultList {
     ResultList() { results = std::vector<std::shared_ptr<Result>>(); }
 
     bool add_vectors(std::vector<std::shared_ptr<Result>> ranges) {
-        // std::cout << "add: " << ranges.size() << " vectors" << std::endl;
         for (std::vector<std::shared_ptr<Result>>::iterator it = ranges.begin(); it != ranges.end(); it++) {
-            // std::cout << "size: " << (*it)->size() << std::endl;
             if ((*it)->size() == 0)
                 return 0;
             add_vector(*it);
@@ -125,7 +124,7 @@ class ResultList {
 
     void update_current_postion() {
         for (long unsigned int i = 0; i < results.size(); i++) {
-            vector_current_pos[i] = results[i]->begin();
+            vector_current_pos.push_back(results[i]->begin());
         }
     }
 
@@ -150,19 +149,11 @@ class ResultList {
                 return;
             }
         }
-
         vector_current_pos[i] = end;
     }
 
     // 对range顺序排序后，获取第i个range第一个值
-    uint get_current_val_of_range(int i) {
-        phmap::flat_hash_map<int, Result::Iterator>::iterator v_it = vector_current_pos.find(i);
-        if (v_it != vector_current_pos.end()) {
-            return *v_it->second;
-        }
-
-        return -1;
-    }
+    uint get_current_val_of_range(int i) { return *vector_current_pos[i]; }
 
     // 更新range的起始迭代器
     void next_val(int i) { vector_current_pos[i]++; }

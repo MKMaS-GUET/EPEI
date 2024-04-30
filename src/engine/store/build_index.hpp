@@ -260,24 +260,21 @@ class IndexBuilder {
             if (pid == 0) {
                 pid = ++_predicate_cnt;
                 predicate2id[p] = pid;
-                p = p + "\n";
-                predict_out.write(p.c_str(), static_cast<long>(p.size()));
+                predict_out.write((p + "\n").c_str(), static_cast<long>(p.size() + 1));
             }
 
             sid = entity2id[s];
             if (sid == 0) {
                 sid = ++_entity_cnt;
                 entity2id[s] = sid;
-                s = s + "\n";
-                entity_outs[sid % 4].write(s.c_str(), static_cast<long>(s.size()));
+                entity_outs[sid % 4].write((s + "\n").c_str(), static_cast<long>(s.size() + 1));
             }
 
             oid = entity2id[o];
             if (oid == 0) {
                 oid = ++_entity_cnt;
                 entity2id[o] = oid;
-                o = o + "\n";
-                entity_outs[oid % 4].write(o.c_str(), static_cast<long>(o.size()));
+                entity_outs[oid % 4].write((o + "\n").c_str(), static_cast<long>(o.size() + 1));
             }
 
             _pso[pid].push_back(std::make_pair(sid, oid));
@@ -445,10 +442,8 @@ class IndexBuilder {
             cnt = po_predicate_map_size[id - 1];
             begin_offset = (id - 1) * 2;
             _predicate_map_file_offset[id - 1].first = offset;
-            // PS_PREDICATE_MAP offset and size
+            // PS_PREDICATE_MAP offset
             _entity_index[begin_offset] = offset;
-            // _entity_index[begin_offset] = offset;
-            // _entity_index[begin_offset + 1] = cnt;
             offset += cnt * 3;
         }
         offset = 0;
@@ -457,8 +452,6 @@ class IndexBuilder {
             begin_offset = (id - 1) * 2;
             _predicate_map_file_offset[id - 1].second = offset;
             _entity_index[begin_offset + 1] = offset;
-            // _entity_index[begin_offset + 2] = offset;
-            // _entity_index[begin_offset + 3] = cnt;
             offset += cnt * 3;
         }
 

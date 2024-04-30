@@ -51,9 +51,12 @@ class ppfi::Engine::Impl {
             std::string sparql = sparqls[i];
 
             if (sparqls.size() > 1) {
-                if (file_name == "")
-                    printf("%ld ------------------------------------------------------------------\n", i + 1);
-                else {
+                if (file_name == "") {
+                    std::cout << i + 1
+                              << " ------------------------------------------------------------------"
+                              << std::endl;
+                    std::cout << sparql << std::endl;
+                } else {
                     output_file << (i + 1)
                                 << " ------------------------------------------------------------------"
                                 << std::endl;
@@ -78,7 +81,7 @@ class ppfi::Engine::Impl {
             executor->query();
 
             auto mapping_start = std::chrono::high_resolution_clock::now();
-            int cnt = 0;
+            uint cnt = 0;
             if (file_name == "")
                 cnt = query_result(executor->result(), index, query_plan, parser);
             else

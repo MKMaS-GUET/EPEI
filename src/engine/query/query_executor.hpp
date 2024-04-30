@@ -4,13 +4,17 @@
 #include <parallel_hashmap/phmap.h>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
+#include <deque>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <stack>
 #include <string>
 #include <utility>
 #include <vector>
+#include "../parser/sparql_parser.hpp"
 #include "../store/index.hpp"
 #include "../tools/thread_pool.hpp"
 #include "leapfrog_join.hpp"
@@ -61,7 +65,57 @@ struct Stat {
     std::vector<std::vector<QueryPlan::Item>> plan;
 };
 
+struct OutputStat {
+    uint result_cnt = 0;
+    std::vector<std::vector<uint>> result;             // 使用deque作为缓冲区
+    std::mutex mtx;                                    // 互斥锁
+    std::condition_variable cv_producer, cv_consumer;  // 条件变量
+    bool finished = false;                             // 用来指示数据添加是否完成
+    const size_t MAX_BUFFER_SIZE = 10000;              // 缓冲区的最大大小
+};
+
 class QueryExecutor {
+    void output_result(SPARQLParser::ProjectModifier modifier) {
+        const auto variable_indexes = _p_query_plan->mapping_variable2idx(*_p_project_variables);
+
+        std::set<std::vector<uint>> distinct_results;
+
+        while (true) {
+            std::unique_lock<std::mutex> lk(_output_stat.mtx);
+            _output_stat.cv_consumer.wait(lk, [this] {
+                return _output_stat.finished ||
+                       (_output_stat.result.size() % _output_stat.MAX_BUFFER_SIZE == 0 &&
+                        !_output_stat.result.empty());
+            });
+
+            if (_output_stat.finished && _output_stat.result.size() == _output_stat.result_cnt)
+                break;  // 如果完成且数据为空，则退出
+
+            // 处理数据
+            while (_output_stat.result.size() > _output_stat.result_cnt) {
+                std::vector<uint>& item = _output_stat.result.front();
+                if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {
+                    if (distinct_results.find(item) != distinct_results.end()) {
+                        continue;
+                    } else {
+                        distinct_results.insert(item);
+                    }
+                }
+                for (const auto& idx : variable_indexes) {
+                    std::cout << *_p_index->id2entity[item[idx]] << " ";
+                }
+                std::cout << "\n";
+                if (_output_stat.result_cnt >= _p_query_plan->limit) {
+                    return;
+                }
+                _output_stat.result_cnt++;
+            }
+
+            lk.unlock();
+            _output_stat.cv_producer.notify_one();  // 通知生产者可能有空间添加新数据了
+        }
+    }
+
    public:
     QueryExecutor(const std::shared_ptr<Index>& p_index, const std::shared_ptr<QueryPlan>& p_query_plan)
         : _stat(p_query_plan->plan()),
@@ -69,13 +123,68 @@ class QueryExecutor {
           _p_query_plan(p_query_plan),
           _prestore_result(p_query_plan->prestore_result) {}
 
+    QueryExecutor(const std::shared_ptr<Index>& p_index,
+                  const std::shared_ptr<QueryPlan>& p_query_plan,
+                  const std::shared_ptr<std::vector<std::string>>& p_project_variables)
+        : _stat(p_query_plan->plan()),
+          _p_index(p_index),
+          _p_query_plan(p_query_plan),
+          _prestore_result(p_query_plan->prestore_result),
+          _p_project_variables(p_project_variables) {}
+
+    uint query(SPARQLParser::ProjectModifier modifier) {
+        _query_begin_time = std::chrono::high_resolution_clock::now();
+
+        pre_join();
+
+        std::thread t(&QueryExecutor::output_result, this, modifier);
+
+        for (;;) {
+            if (_stat.at_end) {
+                if (_stat.level == 0) {
+                    break;
+                }
+                up(_stat);
+                next(_stat);
+            } else {
+                // 补完一个查询结果
+                if (_stat.level == int(_stat.plan.size() - 1)) {
+                    _output_stat.result.push_back(_stat.current_tuple);
+                    std::unique_lock<std::mutex> lk(_output_stat.mtx);
+                    _output_stat.result.push_back(_stat.current_tuple);
+                    lk.unlock();
+                    if (_output_stat.result.size() % _output_stat.MAX_BUFFER_SIZE == 0 &&
+                        _output_stat.result.size()) {
+                        _output_stat.cv_consumer.notify_one();  // 通知消费者有新数据
+                    }
+
+                    if (_stat.result.size() >= _p_query_plan->limit) {
+                        break;
+                    }
+                    next(_stat);
+                } else {
+                    down(_stat);
+                }
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lk(_output_stat.mtx);
+            _output_stat.finished = true;
+        }
+        _output_stat.cv_consumer.notify_all();  // 通知所有消费者完成
+        t.join();
+
+        _query_end_time = std::chrono::high_resolution_clock::now();
+
+        return _output_stat.result_cnt;
+    }
+
     void query() {
         _query_begin_time = std::chrono::high_resolution_clock::now();
-        // _stat.level 相当于 _query_plan 的索引，即变量的优先级顺序 id
         pre_join();
 
         for (;;) {
-            // 只有在 candidate_result 全部处理完和当前level的交集为空，at_end才会为 true
             if (_stat.at_end) {
                 if (_stat.level == 0) {
                     break;
@@ -329,8 +438,7 @@ class QueryExecutor {
                         continue;
                     }
 
-                    std::shared_ptr<Result> rv = _p_index->get_by_ps(item.search_code, entity);
-                    other_item.search_result = rv;
+                    other_item.search_result = _p_index->get_by_ps(item.search_code, entity);
                     if (other_item.search_result->size() == 0) {
                         match = false;
                     }
@@ -344,9 +452,12 @@ class QueryExecutor {
 
    private:
     Stat _stat;
+    OutputStat _output_stat;
     std::shared_ptr<Index> _p_index;
     std::shared_ptr<QueryPlan> _p_query_plan;
     std::vector<std::vector<std::shared_ptr<Result>>> _prestore_result;
+    std::shared_ptr<std::vector<std::string>> _p_project_variables;
+
     std::chrono::system_clock::time_point _query_begin_time, _query_end_time;
 
     phmap::flat_hash_map<std::string, std::shared_ptr<std::vector<uint>>> _pre_join_result;
