@@ -13,62 +13,62 @@
 
 class SPARQLLexer {
    public:
-    enum Token_T {
-        None,
-        Error,
-        Eof,
-        Variable,
-        IRI,
-        Identifier,
-        Colon,
-        Semicolon,
-        Comma,
-        Underscore,
-        At,
-        Plus,
-        Minus,
-        Mul,
-        Div,
-        String,
-        Number,
-        Dot,
-        LCurly,
-        RCurly,
-        LRound,
-        RRound,
-        Equal,
-        NotEqual,
-        Less,
-        LessOrEq,
-        Greater,
-        GreaterOrEq
+    enum TokenT {
+        kNone,
+        kError,
+        kEof,
+        kVariable,
+        kIRI,
+        kIdentifier,
+        kColon,
+        kSemicolon,
+        kComma,
+        kUnderscore,
+        kAt,
+        kPlus,
+        kMinus,
+        kMul,
+        kDiv,
+        kString,
+        kNumber,
+        kDot,
+        kLCurly,
+        kRCurly,
+        kLRound,
+        kRRound,
+        kEqual,
+        kNotEqual,
+        kLess,
+        kLessOrEq,
+        kGreater,
+        kGreaterOrEq
     };
 
    public:
     explicit SPARQLLexer(std::string raw_sparql_string)
-        : _raw_sparql_string(std::move(raw_sparql_string)),
-          _current_pos(_raw_sparql_string.begin()),
-          _token_start_pos(_current_pos),
-          _token_stop_pos(_current_pos),
-          _put_back(Token_T::None),
-          _is_token_finish(false) {}
+        : raw_sparql_string_(std::move(raw_sparql_string)),
+          current_pos_(raw_sparql_string_.begin()),
+          token_start_pos_(current_pos_),
+          token_stop_pos_(current_pos_),
+          PutBack_(TokenT::kNone),
+          is_token_finish_(false) {}
 
     ~SPARQLLexer() = default;
 
-    Token_T get_next_token_type() {
-        if (_is_token_finish)
-            return Token_T::None;
+    TokenT GetNextTokenType() {
+        if (is_token_finish_)
+            return TokenT::kNone;
 
-        if (_put_back != Token_T::None) {
-            auto ret_value = _put_back;
-            _put_back = Token_T::None;
+        if (PutBack_ != TokenT::kNone) {
+            auto ret_value = PutBack_;
+            PutBack_ = TokenT::kNone;
             return ret_value;
         }
 
-        while (has_next()) {
-            _is_token_finish = false;
-            _token_start_pos = _current_pos;
-            switch (*(_current_pos++)) {
+        while (HasNext()) {
+            is_token_finish_ = false;
+            token_start_pos_ = current_pos_;
+            switch (*(current_pos_++)) {
                 case ' ':
                 case '\n':
                 case '\r':
@@ -76,98 +76,98 @@ class SPARQLLexer {
                 case '\t':
                     continue;
                 case '{':
-                    _token_stop_pos = _current_pos;
-                    return Token_T::LCurly;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kLCurly;
                 case '}':
-                    _token_stop_pos = _current_pos;
-                    return Token_T::RCurly;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kRCurly;
                 case '(':
-                    _token_stop_pos = _current_pos;
-                    return Token_T::LRound;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kLRound;
                 case ')':
-                    _token_stop_pos = _current_pos;
-                    return Token_T::RRound;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kRRound;
                 case '.':
-                    _token_stop_pos = _current_pos;
-                    return Token_T::Dot;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kDot;
                 case ':':
-                    _token_stop_pos = _current_pos;
-                    return Token_T::Colon;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kColon;
                 case ';':
-                    _token_stop_pos = _current_pos;
-                    return Token_T::Semicolon;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kSemicolon;
                 case ',':
-                    _token_stop_pos = _current_pos;
-                    return Token_T::Comma;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kComma;
                 case '_':
-                    _token_stop_pos = _current_pos;
-                    return Token_T::Underscore;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kUnderscore;
                 case '@':
-                    _token_stop_pos = _current_pos;
-                    return Token_T::At;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kAt;
                     //                case '+':
-                    //                    _token_stop_pos = _current_pos;
-                    //                    return Token_T::Plus;
+                    //                    token_stop_pos_ = current_pos_;
+                    //                    return TokenT::kPlus;
                     //                case '-':
-                    //                    _token_stop_pos = _current_pos;
-                    //                    return Token_T::Minus;
+                    //                    token_stop_pos_ = current_pos_;
+                    //                    return TokenT::kMinus;
                     //                case '/':
-                    //                    _token_stop_pos = _current_pos;
-                    //                    return Token_T::Div;
+                    //                    token_stop_pos_ = current_pos_;
+                    //                    return TokenT::kDiv;
                 case '*':
-                    _token_stop_pos = _current_pos;
-                    //                    return Token_T::Mul;
-                    return Token_T::Variable;
+                    token_stop_pos_ = current_pos_;
+                    //                    return TokenT::kMul;
+                    return TokenT::kVariable;
                 case '=':
-                    _token_stop_pos = _current_pos;
-                    return Token_T::Equal;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kEqual;
                 case '!':
-                    if (*_current_pos == '=') {
-                        _token_stop_pos = _current_pos;
-                        return Token_T::NotEqual;
+                    if (*current_pos_ == '=') {
+                        token_stop_pos_ = current_pos_;
+                        return TokenT::kNotEqual;
                     }
-                    _is_token_finish = true;
-                    return Token_T::Error;
+                    is_token_finish_ = true;
+                    return TokenT::kError;
                 case '>':
-                    if (*_current_pos == '=') {
-                        ++_current_pos;
-                        _token_stop_pos = _current_pos;
-                        return Token_T::GreaterOrEq;
+                    if (*current_pos_ == '=') {
+                        ++current_pos_;
+                        token_stop_pos_ = current_pos_;
+                        return TokenT::kGreaterOrEq;
                     }
-                    _token_stop_pos = _current_pos;
-                    return Token_T::Greater;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kGreater;
                 case '<':
-                    if (*_current_pos == '=') {
-                        ++_current_pos;
-                        _token_stop_pos = _current_pos;
-                        return Token_T::LessOrEq;
-                    } else if (*_current_pos == ' ') {
-                        _token_stop_pos = _current_pos;
-                        return Token_T::Less;
+                    if (*current_pos_ == '=') {
+                        ++current_pos_;
+                        token_stop_pos_ = current_pos_;
+                        return TokenT::kLessOrEq;
+                    } else if (*current_pos_ == ' ') {
+                        token_stop_pos_ = current_pos_;
+                        return TokenT::kLess;
                     }
-                    while (has_next() && is_legal_iri_inner_character(*_current_pos)) {
-                        if (*(_current_pos++) == '>') {
-                            _token_stop_pos = _current_pos;
-                            return Token_T::IRI;
+                    while (HasNext() && IsLegalIRIInnerCharacter(*current_pos_)) {
+                        if (*(current_pos_++) == '>') {
+                            token_stop_pos_ = current_pos_;
+                            return TokenT::kIRI;
                         }
                     }
-                    _is_token_finish = true;
-                    return Token_T::Error;
+                    is_token_finish_ = true;
+                    return TokenT::kError;
                 case '"':
-                    while (has_next()) {
-                        if (*(_current_pos++) == '"') {
-                            _token_stop_pos = _current_pos;
-                            return Token_T::String;
+                    while (HasNext()) {
+                        if (*(current_pos_++) == '"') {
+                            token_stop_pos_ = current_pos_;
+                            return TokenT::kString;
                         }
                     }
-                    _is_token_finish = true;
-                    return Token_T::Error;
+                    is_token_finish_ = true;
+                    return TokenT::kError;
                 case '?':
-                    while (has_next() && is_legal_variable_character(*_current_pos)) {
-                        ++_current_pos;
+                    while (HasNext() && IsLegalVariableCharacter(*current_pos_)) {
+                        ++current_pos_;
                     }
-                    _token_stop_pos = _current_pos;
-                    return Token_T::Variable;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kVariable;
                 case '0':
                 case '1':
                 case '2':
@@ -179,41 +179,41 @@ class SPARQLLexer {
                 case '8':
                 case '9':
                     // 整数部分
-                    while (has_next() && is_legal_numerical_character(*_current_pos)) {
-                        ++_current_pos;
+                    while (HasNext() && IsLegalNumericalCharacter(*current_pos_)) {
+                        ++current_pos_;
                     }
-                    if (*_current_pos == '.') {
-                        ++_current_pos;
+                    if (*current_pos_ == '.') {
+                        ++current_pos_;
                         // 小数部分
-                        while (has_next() && is_legal_numerical_character(*_current_pos)) {
-                            ++_current_pos;
+                        while (HasNext() && IsLegalNumericalCharacter(*current_pos_)) {
+                            ++current_pos_;
                         }
                     }
-                    _token_stop_pos = _current_pos;
-                    return Token_T::Number;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kNumber;
                 default:
                     // Identifier：1.关键字 2.用户自定义变量
-                    while (has_next() && is_legal_identifier_character(*_current_pos)) {
-                        ++_current_pos;
+                    while (HasNext() && IsLegalIdentifierCharacter(*current_pos_)) {
+                        ++current_pos_;
                     }
-                    _token_stop_pos = _current_pos;
-                    return Token_T::Identifier;
+                    token_stop_pos_ = current_pos_;
+                    return TokenT::kIdentifier;
             }
         }
-        return Token_T::Identifier;
+        return TokenT::kIdentifier;
     }
 
-    [[nodiscard]] std::string get_current_token_value() const {
-        return std::string(_token_start_pos, _token_stop_pos);
+    [[nodiscard]] std::string GetCurrentTokenValue() const {
+        return std::string(token_start_pos_, token_stop_pos_);
     }
 
-    [[nodiscard]] std::string get_iri_value() const {
-        auto current_token_iter = _token_start_pos;
+    [[nodiscard]] std::string GetIRIValue() const {
+        auto current_token_iter = token_start_pos_;
         std::string iri_value;
-        for (; current_token_iter != _token_stop_pos; current_token_iter++) {
+        for (; current_token_iter != token_stop_pos_; current_token_iter++) {
             char c = *current_token_iter;
             if (c == '\\') {
-                if ((++current_token_iter) == _token_stop_pos) {
+                if ((++current_token_iter) == token_stop_pos_) {
                     break;
                 }
                 c = *current_token_iter;
@@ -223,13 +223,13 @@ class SPARQLLexer {
         return iri_value;
     }
 
-    inline bool has_next() { return _token_stop_pos != _raw_sparql_string.end(); }
+    inline bool HasNext() { return token_stop_pos_ != raw_sparql_string_.end(); }
 
-    bool is_keyword(const char* word) {
+    bool IsKeyword(const char* word) {
         bool is_matched = true;
-        auto current_token_iter = _token_start_pos;
+        auto current_token_iter = token_start_pos_;
         char* ch = const_cast<char*>(word);
-        while (current_token_iter != _token_stop_pos) {
+        while (current_token_iter != token_stop_pos_) {
             if (*ch == '\0')
                 break;
             char curr = *current_token_iter;
@@ -243,38 +243,38 @@ class SPARQLLexer {
             ++current_token_iter;
             ++ch;
         }
-        if (current_token_iter != _token_stop_pos || *ch != '\0') {
+        if (current_token_iter != token_stop_pos_ || *ch != '\0') {
             is_matched = false;
         }
         return is_matched;
     }
 
-    // 当下一次调用 get_next_token_type 时，会直接返回 _put_back
-    void put_back(Token_T value) { _put_back = value; }
+    // 当下一次调用 GetNextTokenType 时，会直接返回 PutBack_
+    void PutBack(TokenT value) { PutBack_ = value; }
 
    private:
-    inline bool is_legal_numerical_character(const char& curr) { return '0' <= curr && curr <= '9'; }
+    inline bool IsLegalNumericalCharacter(const char& curr) { return '0' <= curr && curr <= '9'; }
 
-    inline bool is_legal_identifier_character(const char& curr) {
+    inline bool IsLegalIdentifierCharacter(const char& curr) {
         return ('0' <= curr && curr <= '9') || ('a' <= curr && curr <= 'z') || ('A' <= curr && curr <= 'Z') ||
                ('_' == curr);
     }
 
-    inline bool is_legal_variable_character(const char& curr) { return is_legal_identifier_character(curr); }
+    inline bool IsLegalVariableCharacter(const char& curr) { return IsLegalIdentifierCharacter(curr); }
 
-    inline bool is_legal_iri_inner_character(const char& curr) {
+    inline bool IsLegalIRIInnerCharacter(const char& curr) {
         return '\t' != curr && ' ' != curr && '\n' != curr && '\r' != curr;
     }
 
    private:
-    std::string _raw_sparql_string;
-    std::string::const_iterator _current_pos;
+    std::string raw_sparql_string_;
+    std::string::const_iterator current_pos_;
     // token 的第一个字符位置
-    std::string::const_iterator _token_start_pos;
+    std::string::const_iterator token_start_pos_;
     // token 之后的第一个字符
-    std::string::const_iterator _token_stop_pos;
-    Token_T _put_back;
-    bool _is_token_finish;
+    std::string::const_iterator token_stop_pos_;
+    TokenT PutBack_;
+    bool is_token_finish_;
 };
 
 #endif  // SPARQL_LEXER_HPP

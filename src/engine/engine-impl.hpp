@@ -13,7 +13,7 @@
 #include <memory>
 #include <string>
 
-#include <ppfi/engine.hpp>
+#include <epei/engine.hpp>
 
 #include "parser/sparql_parser.hpp"
 #include "query/query_executor.hpp"
@@ -23,13 +23,13 @@
 #include "store/build_index.hpp"
 #include "store/index.hpp"
 
-class ppfi::Engine::Impl {
+class epei::Engine::Impl {
    public:
-    void create(const std::string& db_name, const std::string& data_file) {
+    void Create(const std::string& db_name, const std::string& data_file) {
         auto beg = std::chrono::high_resolution_clock::now();
 
         IndexBuilder builder(db_name, data_file);
-        if (!builder.build()) {
+        if (!builder.Build()) {
             std::cerr << "Building index data failed, terminal the process." << std::endl;
             exit(1);
         }
@@ -39,7 +39,7 @@ class ppfi::Engine::Impl {
         std::cout << "Creating " << db_name << " takes " << diff.count() << " ms." << std::endl;
     }
 
-    void execute_sparql(std::vector<std::string> sparqls,
+    void ExecuteSparql(std::vector<std::string> sparqls,
                         std::shared_ptr<Index> index,
                         std::string file_name) {
         std::ofstream output_file;
@@ -68,24 +68,24 @@ class ppfi::Engine::Impl {
             auto start = std::chrono::high_resolution_clock::now();
 
             auto parser = std::make_shared<SPARQLParser>(sparql);
-            auto triple_list = parser->triple_list();
+            auto triple_list = parser->TripleList();
 
             // generate query plan
-            auto query_plan = std::make_shared<QueryPlan>(index, triple_list, parser->limit());
+            auto query_plan = std::make_shared<QueryPlan>(index, triple_list, parser->Limit());
 
             auto plan_end = std::chrono::high_resolution_clock::now();
 
             // execute query
             auto executor = std::make_shared<QueryExecutor>(index, query_plan);
 
-            executor->query();
+            executor->Query();
 
             auto mapping_start = std::chrono::high_resolution_clock::now();
             uint cnt = 0;
             if (file_name == "")
-                cnt = query_result(executor->result(), index, query_plan, parser);
+                cnt = query_result(executor->query_result(), index, query_plan, parser);
             else
-                cnt = query_result(executor->result(), index, query_plan, parser, output_file);
+                cnt = query_result(executor->query_result(), index, query_plan, parser, output_file);
             auto mapping_finish = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> mapping_diff = mapping_finish - mapping_start;
 
@@ -97,13 +97,13 @@ class ppfi::Engine::Impl {
             if (file_name == "") {
                 std::cout << cnt << " result(s).\n";
                 std::cout << "generate plan takes " << plan_time.count() << " ms.\n";
-                std::cout << "execute takes " << executor->duration() << " ms.\n";
+                std::cout << "execute takes " << executor->Duration() << " ms.\n";
                 std::cout << "output result takes " << mapping_diff.count() << " ms.\n";
                 std::cout << "query cost " << diff.count() << " ms." << std::endl;
             } else {
                 output_file << cnt << "  result(s).\n";
                 output_file << "generate plan takes " << plan_time.count() << " ms.\n";
-                output_file << "execute takes " << executor->duration() << " ms.\n";
+                output_file << "execute takes " << executor->Duration() << " ms.\n";
                 output_file << "output result takes " << mapping_diff.count() << " ms.\n";
                 output_file << "query cost " << diff.count() << " ms." << std::endl;
             }
@@ -112,7 +112,7 @@ class ppfi::Engine::Impl {
         }
     }
 
-    void query(const std::string& name, const std::string& file) {
+    void Query(const std::string& name, const std::string& file) {
         if (name != "" and file != "") {
             std::shared_ptr<Index> index = std::make_shared<Index>(name);
             std::ifstream in(file, std::ifstream::in);
@@ -125,119 +125,120 @@ class ppfi::Engine::Impl {
                 }
                 in.close();
             }
-            execute_sparql(sparqls, index, "");
+            ExecuteSparql(sparqls, index, "");
             exit(0);
-        } else {
-            std::string db_help = "select [database name]";
-            std::string query_help =
-                "Usage: sparql [options]\n"
-                "\n"
-                "Description:\n"
-                "  Run a SPARQL query.\n"
-                "\n\n"
-                "Usage: file [options] [arguments]\n"
-                "\n"
-                "Description:\n"
-                "  Run SPARQL queries from a file and output the results to a file.\n"
-                "\n"
-                "Options:\n"
-                "  -i, --input <file>    Specify the input file containing SPARQL queries.\n"
-                "  -o, --output [file]   Specify the output file for the query results.\n";
-
-            std::string cmd;
-            std::string db;
-            std::shared_ptr<Index> index;
-            list_db();
-            while (true) {
-                std::cout << ">";
-
-                std::cin >> cmd;
-                if (cmd == "select") {
-                    std::cin >> db;
-                    index = std::make_shared<Index>(db);
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-                    while (true) {
-                        std::cout << ">";
-                        std::string sparql;
-                        std::string line;
-                        std::string word;
-                        std::getline(std::cin, line);
-                        std::istringstream iss(line);
-                        bool cmd_flag = true;
-                        while (iss >> word) {
-                            if (cmd_flag) {
-                                cmd = word;
-                                cmd_flag = false;
-                            } else {
-                                sparql += word + " ";
-                            }
-                        }
-
-                        if (sparql.size() > 1)
-                            sparql = sparql.substr(0, sparql.size() - 1);
-
-                        std::vector<std::string> sparqls;
-                        if (cmd == "sparql") {
-                            sparqls.push_back(sparql);
-                            execute_sparql(sparqls, index, "");
-                        } else if (cmd == "file") {
-                            std::string rest_cmd = sparql;
-                            std::istringstream iss(sparql);
-                            std::string token;
-
-                            std::string input_file, output_file = "";
-                            while (iss >> token) {
-                                if (token == "-i" || token == "--input") {
-                                    iss >> input_file;
-                                } else if (token == "-o" || token == "--output") {
-                                    iss >> output_file;
-                                }
-                            }
-
-                            if (input_file != "") {
-                                std::ifstream in(input_file, std::ifstream::in);
-                                if (in.is_open()) {
-                                    std::string line;
-                                    while (std::getline(in, sparql)) {
-                                        sparqls.push_back(sparql);
-                                    }
-                                    in.close();
-                                }
-                                execute_sparql(sparqls, index, output_file);
-                            }
-                        } else if (cmd == "help") {
-                            std::cout << query_help << std::endl;
-                        } else if (cmd == "change") {
-                            index->close();
-                            list_db();
-                            break;
-                        } else if (cmd == "exit") {
-                            exit(0);
-                        } else {
-                            std::cout << query_help << std::endl;
-                        }
-
-                        // sleep(1);
-                    }
-
-                } else if (cmd == "help") {
-                    std::cout << db_help << std::endl;
-                } else if (cmd == "exit") {
-                    exit(0);
-                } else {
-                    list_db();
-                }
-            }
         }
+        //  else {
+        //     std::string db_help = "select [database name]";
+        //     std::string query_help =
+        //         "Usage: sparql [options]\n"
+        //         "\n"
+        //         "Description:\n"
+        //         "  Run a SPARQL query.\n"
+        //         "\n\n"
+        //         "Usage: file [options] [arguments]\n"
+        //         "\n"
+        //         "Description:\n"
+        //         "  Run SPARQL queries from a file and output the results to a file.\n"
+        //         "\n"
+        //         "Options:\n"
+        //         "  -i, --input <file>    Specify the input file containing SPARQL queries.\n"
+        //         "  -o, --output [file]   Specify the output file for the query results.\n";
+
+        //     std::string cmd;
+        //     std::string db;
+        //     std::shared_ptr<Index> index;
+        //     ListDB();
+        //     while (true) {
+        //         std::cout << ">";
+
+        //         std::cin >> cmd;
+        //         if (cmd == "select") {
+        //             std::cin >> db;
+        //             index = std::make_shared<Index>(db);
+        //             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+        //             while (true) {
+        //                 std::cout << ">";
+        //                 std::string sparql;
+        //                 std::string line;
+        //                 std::string word;
+        //                 std::getline(std::cin, line);
+        //                 std::istringstream iss(line);
+        //                 bool cmd_flag = true;
+        //                 while (iss >> word) {
+        //                     if (cmd_flag) {
+        //                         cmd = word;
+        //                         cmd_flag = false;
+        //                     } else {
+        //                         sparql += word + " ";
+        //                     }
+        //                 }
+
+        //                 if (sparql.size() > 1)
+        //                     sparql = sparql.substr(0, sparql.size() - 1);
+
+        //                 std::vector<std::string> sparqls;
+        //                 if (cmd == "sparql") {
+        //                     sparqls.push_back(sparql);
+        //                     ExecuteSparql(sparqls, index, "");
+        //                 } else if (cmd == "file") {
+        //                     std::string rest_cmd = sparql;
+        //                     std::istringstream iss(sparql);
+        //                     std::string token;
+
+        //                     std::string input_file, output_file = "";
+        //                     while (iss >> token) {
+        //                         if (token == "-i" || token == "--input") {
+        //                             iss >> input_file;
+        //                         } else if (token == "-o" || token == "--output") {
+        //                             iss >> output_file;
+        //                         }
+        //                     }
+
+        //                     if (input_file != "") {
+        //                         std::ifstream in(input_file, std::ifstream::in);
+        //                         if (in.is_open()) {
+        //                             std::string line;
+        //                             while (std::getline(in, sparql)) {
+        //                                 sparqls.push_back(sparql);
+        //                             }
+        //                             in.close();
+        //                         }
+        //                         ExecuteSparql(sparqls, index, output_file);
+        //                     }
+        //                 } else if (cmd == "help") {
+        //                     std::cout << query_help << std::endl;
+        //                 } else if (cmd == "change") {
+        //                     index->close();
+        //                     list_db();
+        //                     break;
+        //                 } else if (cmd == "exit") {
+        //                     exit(0);
+        //                 } else {
+        //                     std::cout << query_help << std::endl;
+        //                 }
+
+        //                 // sleep(1);
+        //             }
+
+        //         } else if (cmd == "help") {
+        //             std::cout << db_help << std::endl;
+        //         } else if (cmd == "exit") {
+        //             exit(0);
+        //         } else {
+        //             list_db();
+        //         }
+        //     }
+        // }
 
         // parse SPARQL statement
     }
 
-    void server(const std::string& ip, const std::string& port) { start_server(ip, port); }
+    void Server(const std::string& ip, const std::string& port) { start_server(ip, port); }
 
    private:
-    void list_db() {
+    void ListDB() {
         std::cout << ">select a database:" << std::endl;
 
         std::filesystem::path path("./DB_DATA_ARCHIVE");

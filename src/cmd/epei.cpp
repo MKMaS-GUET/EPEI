@@ -2,31 +2,31 @@
 #include <iterator>
 #include <sstream>
 
-#include <ppfi/engine.hpp>
+#include <epei/engine.hpp>
 
 #include "parser/args_parser.hpp"
 
-void build(const std::unordered_map<std::string, std::string>& arguments) {
+void Build(const std::unordered_map<std::string, std::string>& arguments) {
     std::string db_name = arguments.at("name");
     std::string data_file = arguments.at("file");
-    ppfi::Engine::Create(db_name, data_file);
+    epei::Engine::Create(db_name, data_file);
 }
 
-void query(const std::unordered_map<std::string, std::string>& arguments) {
+void Query(const std::unordered_map<std::string, std::string>& arguments) {
     std::string db_name;
     std::string sparql_file;
     if (arguments.count("name"))
         db_name = arguments.at("name");
-    if (arguments.count("name"))
+    if (arguments.count("file"))
         sparql_file = arguments.at("file");
 
-    ppfi::Engine::Query(db_name, sparql_file);
+    epei::Engine::Query(db_name, sparql_file);
 }
 
-void server(const std::unordered_map<std::string, std::string>& arguments) {
+void Server(const std::unordered_map<std::string, std::string>& arguments) {
     std::string ip = arguments.at("ip");
     std::string port = arguments.at("port");
-    ppfi::Engine::Server(ip, port);
+    epei::Engine::Server(ip, port);
 }
 
 struct EnumClassHash {
@@ -36,19 +36,19 @@ struct EnumClassHash {
     }
 };
 
-std::unordered_map<ArgsParser::Command_T,
+std::unordered_map<ArgsParser::CommandT,
                    void (*)(const std::unordered_map<std::string, std::string>&),
                    EnumClassHash>
     selector;
 
 int main(int argc, char** argv) {
-    selector = {{ArgsParser::Command_T::Build, &build},
-                {ArgsParser::Command_T::Query, &query},
-                {ArgsParser::Command_T::Server, &server}};
+    selector = {{ArgsParser::CommandT::kBuild, &Build},
+                {ArgsParser::CommandT::kQuery, &Query},
+                {ArgsParser::CommandT::kServer, &Server}};
 
     auto parser = ArgsParser();
-    auto command = parser.parse(argc, argv);
-    auto arguments = parser.arguments();
+    auto command = parser.Parse(argc, argv);
+    auto arguments = parser.Arguments();
     selector[command](arguments);
     return 0;
 }

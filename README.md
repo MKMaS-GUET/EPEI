@@ -1,4 +1,4 @@
-# PPFI
+# EPEI
 
 An RDF Retrival System with **P**ath-Based **P**lan and **F**ast **I**ndexing
 
@@ -9,7 +9,7 @@ A Vue front-end is avaiable  [here](https://github.com/LiuYipeng42/RDF_Retrieval
 1. Clone this project
 
 ```shell
-git clone https://github.com/MKMaS-GUET/PPFI
+git clone https://github.com/MKMaS-GUET/EPEI
 git submodule update --init --recursive
 ```
 
@@ -41,15 +41,15 @@ Download the RDF data and queries that we want to use:
 ## How to use
 
 ```
-Usage: ppfi <command> [<args>]
+Usage: epei <command> [<args>]
 
 Description:
-  Common commands for various situations using PPFI.
+  Common commands for various situations using EPEI.
 
 Commands:
   build      Build the data index for the given RDF data file path.
   query      Query the SPARQL statement for the given file path.
-  server     Start the PPFI server.
+  server     Start the EPEI server.
 
 Options:
   -h, --help      Show this help message and exit.
@@ -66,7 +66,7 @@ Positional Arguments:
 Build RDF database:
 
 ```shell
-ppfi build -n <rdf_db_name> -f <rdf_file_name>
+epei build -n <rdf_db_name> -f <rdf_file_name>
 ```
 
 Execute SPARQL query:
@@ -99,10 +99,10 @@ Options:
 Run http  server:
 
 ```shell
-Usage: ppfi server [-p,--port PORT]
+Usage: epei server [-p,--port PORT]
 
 Description:
-  Start the HTTP server for PPFI.
+  Start the HTTP server for EPEI.
 
 Options:
   -p, --port <PORT>   Specify the HTTP server port.
@@ -111,6 +111,6 @@ Optional Arguments:
   -h, --help          Show this help message and exit.
 
 Examples:
-  ppfi server --port 8080
+  epei server --port 8080
 ```
 

@@ -8,21 +8,21 @@
 
 #include "engine-impl.hpp"
 
-namespace ppfi {
+namespace epei {
 
 void Engine::Create(const std::string& db_name, const std::string& data_file) {
     auto impl = std::make_shared<Engine::Impl>();
-    impl->create(db_name, data_file);
+    impl->Create(db_name, data_file);
 }
 
 void Engine::Query(const std::string& db_name, const std::string& data_file) {
     auto impl = std::make_shared<Engine::Impl>();
-    impl->query(db_name, data_file);
+    impl->Query(db_name, data_file);
 }
 
 void Engine::Server(const std::string& ip, const std::string& port) {
     auto impl = std::make_shared<Engine::Impl>();
-    impl->server(ip, port);
+    impl->Server(ip, port);
 }
 
-}  // namespace ppfi
+}  // namespace epei

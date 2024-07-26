@@ -1,4 +1,4 @@
-set(this ppfi)
+set(this epei)
 
 file(GLOB_RECURSE srcs CONFIGURE_DEPENDS
         *.hpp *.cpp)

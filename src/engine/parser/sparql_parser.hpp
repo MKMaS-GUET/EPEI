@@ -22,15 +22,15 @@
 class SPARQLParser {
    public:
     struct ParserException : public std::exception {
-        std::string _message;
+        std::string message_;
 
-        explicit ParserException(std::string message) : _message(std::move(message)) {}
+        explicit ParserException(std::string message) : message_(std::move(message)) {}
 
-        explicit ParserException(const char* message) : _message(message) {}
+        explicit ParserException(const char* message) : message_(message) {}
 
-        [[nodiscard]] const char* what() const noexcept override { return _message.c_str(); }
+        [[nodiscard]] const char* what() const noexcept override { return message_.c_str(); }
 
-        [[nodiscard]] std::string to_string() const { return _message; }
+        [[nodiscard]] std::string to_string() const { return message_; }
     };
 
     struct TriplePatternElem {
@@ -87,7 +87,7 @@ class SPARQLParser {
 
         Type modifier_type_;
 
-        [[nodiscard]] std::string to_string() const {
+        [[nodiscard]] std::string toString() const {
             switch (modifier_type_) {
                 case Type::None:
                     return "Modifier::Type::None";
@@ -106,52 +106,52 @@ class SPARQLParser {
 
    public:
     explicit SPARQLParser(const SPARQLLexer& sparql_lexer)
-        : _limit(UINTMAX_MAX), _sparql_lexer(sparql_lexer), _project_modifier(ProjectModifier::Type::None) {
+        : limit_(UINTMAX_MAX), sparql_lexer_(sparql_lexer), project_modifier_(ProjectModifier::Type::None) {
         parse();
     }
 
     explicit SPARQLParser(std::string input_string)
-        : _limit(UINTMAX_MAX),
-          _sparql_lexer(SPARQLLexer(std::move(input_string))),
-          _project_modifier(ProjectModifier::Type::None) {
+        : limit_(UINTMAX_MAX),
+          sparql_lexer_(SPARQLLexer(std::move(input_string))),
+          project_modifier_(ProjectModifier::Type::None) {
         parse();
     }
 
     ~SPARQLParser() = default;
 
-    ProjectModifier project_modifier() const { return _project_modifier; }
+    ProjectModifier project_modifier() const { return project_modifier_; }
 
-    const std::vector<std::string>& project_variables() const { return _project_variables; }
+    const std::vector<std::string>& ProjectVariables() const { return project_variables_; }
 
-    const std::vector<TriplePattern>& triple_patterns() const { return _triple_patterns; }
+    const std::vector<TriplePattern>& TriplePatterns() const { return triple_patterns_; }
 
-    std::vector<std::vector<std::string>> triple_list() const {
+    std::vector<std::vector<std::string>> TripleList() const {
         std::vector<std::vector<std::string>> list;
-        for (const auto& item : _triple_patterns) {
+        for (const auto& item : triple_patterns_) {
             list.push_back({item.subj_.value_, item.pred_.value_, item.obj_.value_});
         }
         return list;
     }
 
-    const std::unordered_map<std::string, Filter>& filters() const { return _filters; }
+    const std::unordered_map<std::string, Filter>& Filters() const { return filters_; }
 
-    const std::unordered_map<std::string, std::string>& prefixes() const { return _prefixes; }
+    const std::unordered_map<std::string, std::string>& Prefixes() const { return prefixes_; }
 
-    size_t limit() const { return _limit; }
+    size_t Limit() const { return limit_; }
 
    private:
     void parse() {
-        parse_prefix();
-        parse_projection();
-        parse_where();
-        parse_group_graph_pattern();
-        parse_limit();
+        ParsePrefix();
+        ParseProjection();
+        ParseWhere();
+        ParseGroupGraphPattern();
+        ParseLimit();
 
         // 如果 select 后是 *，则查询结果的变量应该是三元组中出现的变量
-        if (_project_variables[0] == "*") {
-            _project_variables.clear();
+        if (project_variables_[0] == "*") {
+            project_variables_.clear();
             std::set<std::string> variables_set;
-            for (const auto& item : _triple_patterns) {
+            for (const auto& item : triple_patterns_) {
                 const auto& s = item.subj_.value_;
                 const auto& p = item.pred_.value_;
                 const auto& o = item.obj_.value_;
@@ -162,247 +162,247 @@ class SPARQLParser {
                 if (o[0] == '?')
                     variables_set.insert(o);
             }
-            _project_variables.assign(variables_set.begin(), variables_set.end());
+            project_variables_.assign(variables_set.begin(), variables_set.end());
         }
     }
 
-    void parse_prefix() {
+    void ParsePrefix() {
         for (;;) {
-            auto token_t = _sparql_lexer.get_next_token_type();
-            if (token_t == SPARQLLexer::Identifier && _sparql_lexer.is_keyword("prefix")) {
-                if (_sparql_lexer.get_next_token_type() != SPARQLLexer::Identifier) {
+            auto token_t = sparql_lexer_.GetNextTokenType();
+            if (token_t == SPARQLLexer::kIdentifier && sparql_lexer_.IsKeyword("prefix")) {
+                if (sparql_lexer_.GetNextTokenType() != SPARQLLexer::kIdentifier) {
                     throw ParserException("Expect : prefix name");
                 }
-                std::string name = _sparql_lexer.get_current_token_value();
-                if (_sparql_lexer.get_next_token_type() != SPARQLLexer::Colon) {
+                std::string name = sparql_lexer_.GetCurrentTokenValue();
+                if (sparql_lexer_.GetNextTokenType() != SPARQLLexer::kColon) {
                     throw ParserException("Expect : ':");
                 }
-                if (_sparql_lexer.get_next_token_type() != SPARQLLexer::IRI) {
+                if (sparql_lexer_.GetNextTokenType() != SPARQLLexer::kIRI) {
                     throw ParserException("Expect : IRI");
                 }
-                std::string iri = _sparql_lexer.get_iri_value();
-                if (_prefixes.count(name)) {
+                std::string iri = sparql_lexer_.GetIRIValue();
+                if (prefixes_.count(name)) {
                     throw ParserException("Duplicate prefix '" + name + "'");
                 }
-                _prefixes[name] = iri;
+                prefixes_[name] = iri;
             } else {
-                _sparql_lexer.put_back(token_t);
+                sparql_lexer_.PutBack(token_t);
                 return;
             }
         }
     }
 
-    void parse_projection() {
-        auto token_t = _sparql_lexer.get_next_token_type();
+    void ParseProjection() {
+        auto token_t = sparql_lexer_.GetNextTokenType();
 
-        if (token_t != SPARQLLexer::Token_T::Identifier || !_sparql_lexer.is_keyword("select")) {
+        if (token_t != SPARQLLexer::TokenT::kIdentifier || !sparql_lexer_.IsKeyword("select")) {
             throw ParserException("Except : 'select'");
         }
 
-        token_t = _sparql_lexer.get_next_token_type();
-        if (token_t == SPARQLLexer::Identifier) {
-            if (_sparql_lexer.is_keyword("distinct"))
-                _project_modifier = ProjectModifier::Type::Distinct;
-            else if (_sparql_lexer.is_keyword("reduced"))
-                _project_modifier = ProjectModifier::Type::Reduced;
-            else if (_sparql_lexer.is_keyword("count"))
-                _project_modifier = ProjectModifier::Type::Count;
-            else if (_sparql_lexer.is_keyword("duplicates"))
-                _project_modifier = ProjectModifier::Type::Duplicates;
+        token_t = sparql_lexer_.GetNextTokenType();
+        if (token_t == SPARQLLexer::kIdentifier) {
+            if (sparql_lexer_.IsKeyword("distinct"))
+                project_modifier_ = ProjectModifier::Type::Distinct;
+            else if (sparql_lexer_.IsKeyword("reduced"))
+                project_modifier_ = ProjectModifier::Type::Reduced;
+            else if (sparql_lexer_.IsKeyword("count"))
+                project_modifier_ = ProjectModifier::Type::Count;
+            else if (sparql_lexer_.IsKeyword("duplicates"))
+                project_modifier_ = ProjectModifier::Type::Duplicates;
             else
-                _sparql_lexer.put_back(token_t);
+                sparql_lexer_.PutBack(token_t);
         } else
-            _sparql_lexer.put_back(token_t);
+            sparql_lexer_.PutBack(token_t);
 
-        _project_variables.clear();
+        project_variables_.clear();
         do {
-            token_t = _sparql_lexer.get_next_token_type();
-            if (token_t != SPARQLLexer::Token_T::Variable) {
-                _sparql_lexer.put_back(token_t);
+            token_t = sparql_lexer_.GetNextTokenType();
+            if (token_t != SPARQLLexer::TokenT::kVariable) {
+                sparql_lexer_.PutBack(token_t);
                 break;
             }
-            _project_variables.push_back(_sparql_lexer.get_current_token_value());
+            project_variables_.push_back(sparql_lexer_.GetCurrentTokenValue());
         } while (true);
 
-        if (_project_variables.empty()) {
+        if (project_variables_.empty()) {
             throw ParserException("project query_variables is empty");
         }
     }
 
-    void parse_where() {
-        if (_sparql_lexer.get_next_token_type() != SPARQLLexer::Token_T::Identifier ||
-            !_sparql_lexer.is_keyword("where")) {
+    void ParseWhere() {
+        if (sparql_lexer_.GetNextTokenType() != SPARQLLexer::TokenT::kIdentifier ||
+            !sparql_lexer_.IsKeyword("where")) {
             throw ParserException("Except: 'where'");
         }
     }
 
-    void parse_filter() {
-        if (_sparql_lexer.get_next_token_type() != SPARQLLexer::Token_T::LRound) {
+    void ParseFilter() {
+        if (sparql_lexer_.GetNextTokenType() != SPARQLLexer::TokenT::kLRound) {
             throw ParserException("Expect : (");
         }
 
-        if (_sparql_lexer.get_next_token_type() != SPARQLLexer::Token_T::Variable) {
+        if (sparql_lexer_.GetNextTokenType() != SPARQLLexer::TokenT::kVariable) {
             throw ParserException("Expect : Variable");
         }
-        std::string variable = _sparql_lexer.get_current_token_value();
+        std::string variable = sparql_lexer_.GetCurrentTokenValue();
         Filter filter;
         filter.variable_str_ = variable;
-        auto token = _sparql_lexer.get_next_token_type();
+        auto token = sparql_lexer_.GetNextTokenType();
         switch (token) {
-            case SPARQLLexer::Token_T::Equal:
+            case SPARQLLexer::TokenT::kEqual:
                 filter.filter_type_ = Filter::Type::Equal;
                 break;
-            case SPARQLLexer::Token_T::NotEqual:
+            case SPARQLLexer::TokenT::kNotEqual:
                 filter.filter_type_ = Filter::Type::NotEqual;
                 break;
-            case SPARQLLexer::Token_T::Less:
+            case SPARQLLexer::TokenT::kLess:
                 filter.filter_type_ = Filter::Type::Less;
                 break;
-            case SPARQLLexer::Token_T::LessOrEq:
+            case SPARQLLexer::TokenT::kLessOrEq:
                 filter.filter_type_ = Filter::Type::LessOrEq;
                 break;
-            case SPARQLLexer::Token_T::Greater:
+            case SPARQLLexer::TokenT::kGreater:
                 filter.filter_type_ = Filter::Type::Greater;
                 break;
-            case SPARQLLexer::Token_T::GreaterOrEq:
+            case SPARQLLexer::TokenT::kGreaterOrEq:
                 filter.filter_type_ = Filter::Type::GreaterOrEq;
                 break;
             default:
                 filter.filter_type_ = Filter::Type::Function;
-                std::string function_name = _sparql_lexer.get_current_token_value();
-                filter.filter_args_.push_back(make_function_literal(function_name));
+                std::string function_name = sparql_lexer_.GetCurrentTokenValue();
+                filter.filter_args_.push_back(MakeFunctionLiteral(function_name));
                 break;
         }
         bool is_finish = false;
         while (!is_finish) {
-            auto token = _sparql_lexer.get_next_token_type();
+            auto token = sparql_lexer_.GetNextTokenType();
             switch (token) {
-                case SPARQLLexer::Token_T::RRound:
+                case SPARQLLexer::TokenT::kRRound:
                     is_finish = true;
                     break;
-                case SPARQLLexer::Token_T::Eof:
+                case SPARQLLexer::TokenT::kEof:
                     throw ParserException("Unexpect EOF in parse 'filter(...'");
-                case SPARQLLexer::Token_T::String: {
-                    std::string value = _sparql_lexer.get_current_token_value();
-                    auto string_elem = make_string_literal(value);
+                case SPARQLLexer::TokenT::kString: {
+                    std::string value = sparql_lexer_.GetCurrentTokenValue();
+                    auto string_elem = MakeStringLiteral(value);
                     filter.filter_args_.push_back(string_elem);
                 } break;
-                case SPARQLLexer::Token_T::Number: {
-                    std::string value = _sparql_lexer.get_current_token_value();
-                    auto double_elem = make_double_literal(value);
+                case SPARQLLexer::TokenT::kNumber: {
+                    std::string value = sparql_lexer_.GetCurrentTokenValue();
+                    auto double_elem = MakeDoubleLiteral(value);
                     filter.filter_args_.push_back(double_elem);
                 } break;
                 default:
                     throw ParserException("Parse filter failed when meet :" +
-                                          _sparql_lexer.get_current_token_value());
+                                          sparql_lexer_.GetCurrentTokenValue());
             }
         }
-        _filters[filter.variable_str_] = filter;
+        filters_[filter.variable_str_] = filter;
     }
 
-    void parse_group_graph_pattern() {
-        if (_sparql_lexer.get_next_token_type() != SPARQLLexer::Token_T::LCurly) {
+    void ParseGroupGraphPattern() {
+        if (sparql_lexer_.GetNextTokenType() != SPARQLLexer::TokenT::kLCurly) {
             throw ParserException("Except : '{'");
         }
 
         while (true) {
-            auto token_t = _sparql_lexer.get_next_token_type();
-            if (token_t == SPARQLLexer::Token_T::LCurly) {
-                _sparql_lexer.put_back(token_t);
-                parse_group_graph_pattern();
-            } else if (token_t == SPARQLLexer::Token_T::Identifier && _sparql_lexer.is_keyword("optional") &&
-                       _sparql_lexer.is_keyword("OPTIONAL")) {
-                if (_sparql_lexer.get_next_token_type() != SPARQLLexer::Token_T::LCurly) {
+            auto token_t = sparql_lexer_.GetNextTokenType();
+            if (token_t == SPARQLLexer::TokenT::kLCurly) {
+                sparql_lexer_.PutBack(token_t);
+                ParseGroupGraphPattern();
+            } else if (token_t == SPARQLLexer::TokenT::kIdentifier && sparql_lexer_.IsKeyword("optional") &&
+                       sparql_lexer_.IsKeyword("OPTIONAL")) {
+                if (sparql_lexer_.GetNextTokenType() != SPARQLLexer::TokenT::kLCurly) {
                     throw ParserException("Except : '{'");
                 }
-                parse_basic_graph_pattern(true);
-                if (_sparql_lexer.get_next_token_type() != SPARQLLexer::Token_T::RCurly) {
+                ParseBasicGraphPattern(true);
+                if (sparql_lexer_.GetNextTokenType() != SPARQLLexer::TokenT::kRCurly) {
                     throw ParserException("Except : '}'");
                 }
-            } else if (token_t == SPARQLLexer::Token_T::Identifier && _sparql_lexer.is_keyword("filter") &&
-                       _sparql_lexer.is_keyword("FILTER")) {
-                parse_filter();
-            } else if (token_t == SPARQLLexer::Token_T::RCurly) {
+            } else if (token_t == SPARQLLexer::TokenT::kIdentifier && sparql_lexer_.IsKeyword("filter") &&
+                       sparql_lexer_.IsKeyword("FILTER")) {
+                ParseFilter();
+            } else if (token_t == SPARQLLexer::TokenT::kRCurly) {
                 break;
-            } else if (token_t == SPARQLLexer::Token_T::Eof) {
+            } else if (token_t == SPARQLLexer::TokenT::kEof) {
                 throw ParserException("Unexpect EOF");
             } else {
-                _sparql_lexer.put_back(token_t);
-                parse_basic_graph_pattern(false);
+                sparql_lexer_.PutBack(token_t);
+                ParseBasicGraphPattern(false);
             }
         }
     }
 
-    void parse_basic_graph_pattern(bool is_option) {
+    void ParseBasicGraphPattern(bool is_option) {
         TriplePatternElem pattern_elem[3];
         for (int i = 0; i < 3; ++i) {
-            auto token_t = _sparql_lexer.get_next_token_type();
-            std::string token_value = _sparql_lexer.get_current_token_value();
+            auto token_t = sparql_lexer_.GetNextTokenType();
+            std::string token_value = sparql_lexer_.GetCurrentTokenValue();
             TriplePatternElem elem;
             switch (token_t) {
-                case SPARQLLexer::Token_T::Variable:
-                    elem = make_variable(token_value);
+                case SPARQLLexer::TokenT::kVariable:
+                    elem = MakeVariable(token_value);
                     break;
-                case SPARQLLexer::Token_T::IRI:
-                    elem = make_iri(token_value);
+                case SPARQLLexer::TokenT::kIRI:
+                    elem = MakeIRI(token_value);
                     break;
-                case SPARQLLexer::Token_T::String:
-                    elem = make_string_literal(token_value);
+                case SPARQLLexer::TokenT::kString:
+                    elem = MakeStringLiteral(token_value);
                     break;
-                case SPARQLLexer::Token_T::Number:
-                    elem = make_double_literal(token_value);
+                case SPARQLLexer::TokenT::kNumber:
+                    elem = MakeDoubleLiteral(token_value);
                     break;
-                case SPARQLLexer::Token_T::Identifier:
-                    elem = make_no_type_literal(token_value);
+                case SPARQLLexer::TokenT::kIdentifier:
+                    elem = MakeNoTypeLiteral(token_value);
                     break;
                 default:
                     throw ParserException("Except variable or IRI or Literal or Blank");
             }
             pattern_elem[i] = elem;
         }
-        auto token_t = _sparql_lexer.get_next_token_type();
-        if (token_t != SPARQLLexer::Token_T::Dot) {
-            _sparql_lexer.put_back(token_t);
+        auto token_t = sparql_lexer_.GetNextTokenType();
+        if (token_t != SPARQLLexer::TokenT::kDot) {
+            sparql_lexer_.PutBack(token_t);
         }
         TriplePattern pattern(pattern_elem[0], pattern_elem[1], pattern_elem[2], is_option);
-        _triple_patterns.push_back(std::move(pattern));
+        triple_patterns_.push_back(std::move(pattern));
     }
 
-    void parse_limit() {
-        auto token_t = _sparql_lexer.get_next_token_type();
-        if (token_t == SPARQLLexer::Identifier && _sparql_lexer.is_keyword("limit")) {
-            if (_sparql_lexer.get_next_token_type() != SPARQLLexer::Number) {
+    void ParseLimit() {
+        auto token_t = sparql_lexer_.GetNextTokenType();
+        if (token_t == SPARQLLexer::kIdentifier && sparql_lexer_.IsKeyword("limit")) {
+            if (sparql_lexer_.GetNextTokenType() != SPARQLLexer::kNumber) {
                 throw ParserException("Except : limit number");
             }
-            std::string curr_number_token = _sparql_lexer.get_current_token_value();
+            std::string curr_number_token = sparql_lexer_.GetCurrentTokenValue();
             std::stringstream ss(curr_number_token);
-            ss >> _limit;
+            ss >> limit_;
         } else {
-            _sparql_lexer.put_back(token_t);
+            sparql_lexer_.PutBack(token_t);
         }
     }
 
-    TriplePatternElem make_variable(std::string variable) {
+    TriplePatternElem MakeVariable(std::string variable) {
         return {TPElem::Type::Variable, TPElem::LiteralType::None, std::move(variable)};
     }
 
-    TriplePatternElem make_iri(std::string IRI) {
+    TriplePatternElem MakeIRI(std::string IRI) {
         return {TPElem::Type::IRI, TPElem::LiteralType::None, std::move(IRI)};
     }
 
-    TriplePatternElem make_integer_literal(std::string literal) {
+    TriplePatternElem MakeIntegerLiteral(std::string literal) {
         return {TPElem::Type::Literal, TPElem::LiteralType::Integer, std::move(literal)};
     }
 
-    TriplePatternElem make_double_literal(std::string literal) {
+    TriplePatternElem MakeDoubleLiteral(std::string literal) {
         return {TPElem::Type::Literal, TPElem::LiteralType::Double, std::move(literal)};
     }
 
-    TriplePatternElem make_no_type_literal(std::string literal) {
+    TriplePatternElem MakeNoTypeLiteral(std::string literal) {
         return {TPElem::Type::Literal, TPElem::LiteralType::None, std::move(literal)};
     }
 
-    TriplePatternElem make_string_literal(const std::string& literal) {
+    TriplePatternElem MakeStringLiteral(const std::string& literal) {
         size_t literal_len = literal.size();
         std::string cleaned_literal;
         if (literal_len > 2) {
@@ -411,18 +411,18 @@ class SPARQLParser {
         return {TPElem::Type::Literal, TPElem::LiteralType::String, cleaned_literal};
     }
 
-    TriplePatternElem make_function_literal(std::string literal) {
+    TriplePatternElem MakeFunctionLiteral(std::string literal) {
         return {TPElem::Type::Literal, TPElem::LiteralType::Function, std::move(literal)};
     }
 
    private:
-    size_t _limit;  // limit number
-    SPARQLLexer _sparql_lexer;
-    ProjectModifier _project_modifier;            // modifier
-    std::vector<std::string> _project_variables;  // all variables to be outputted
-    std::vector<TriplePattern> _triple_patterns;  // all triple patterns
-    std::unordered_map<std::string, Filter> _filters;
-    std::unordered_map<std::string, std::string> _prefixes;  // the registered prefixes
+    size_t limit_;  // limit number
+    SPARQLLexer sparql_lexer_;
+    ProjectModifier project_modifier_;            // modifier
+    std::vector<std::string> project_variables_;  // all variables to be outputted
+    std::vector<TriplePattern> triple_patterns_;  // all triple patterns
+    std::unordered_map<std::string, Filter> filters_;
+    std::unordered_map<std::string, std::string> prefixes_;  // the registered prefixes
 };
 
 #endif  // SPARQL_PARSER_HPP

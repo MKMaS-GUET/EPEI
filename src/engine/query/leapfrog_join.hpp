@@ -13,24 +13,24 @@
 #include <algorithm>
 #include <vector>
 
-void leapfrog_join(ResultList& pair_begin_end, std::vector<uint>& result_set) {
+void LeapfrogJoin(ResultList& pair_begin_end, std::vector<uint>& result_set) {
     uint value;
 
     // Check if any index is empty => Intersection empty
-    if (pair_begin_end.has_empty())
+    if (pair_begin_end.HasEmpty())
         return;
 
-    pair_begin_end.update_current_postion();
+    pair_begin_end.UpdateCurrentPostion();
     // 创建指向每一个列表的指针，初始指向列表的第一个值
 
     //  max 是所有指针指向位置的最大值，初始的最大值就是对列表排序后，最后一个列表的第一个值
-    size_t max = pair_begin_end.get_current_val_of_range(pair_begin_end.size() - 1);
+    size_t max = pair_begin_end.GetCurrentValOfRange(pair_begin_end.Size() - 1);
     // 当前迭代器的 id
     size_t idx = 0;
 
     while (true) {
         // 当前迭代器的第一个值
-        value = pair_begin_end.get_current_val_of_range(idx);
+        value = pair_begin_end.GetCurrentValOfRange(idx);
 
         // get_current_val_time += diff.count();
         // An intersecting value has been found!
@@ -43,39 +43,39 @@ void leapfrog_join(ResultList& pair_begin_end, std::vector<uint>& result_set) {
         // 因为此时已经遍历了所有迭代器，都找到了相同的值，所以就找到了交集中的值
         if (value == max) {
             result_set.push_back(value);
-            pair_begin_end.next_val(idx);
+            pair_begin_end.NextVal(idx);
             // We shall find a value greater or equal than the current max
         } else {
             // 将当前迭代器指向的位置变为第一个大于 max 的值的位置
-            pair_begin_end.seek(idx, max);
+            pair_begin_end.Seek(idx, max);
         }
 
-        if (pair_begin_end.at_end(idx)) {
+        if (pair_begin_end.AtEnd(idx)) {
             break;
         }
 
         // Store the maximum
-        max = pair_begin_end.get_current_val_of_range(idx);
+        max = pair_begin_end.GetCurrentValOfRange(idx);
 
         idx++;
-        idx = idx % pair_begin_end.size();
+        idx = idx % pair_begin_end.Size();
     }
 }
 
-std::shared_ptr<std::vector<uint>> leapfrog_join(ResultList& indexes) {
+std::shared_ptr<std::vector<uint>> LeapfrogJoin(ResultList& indexes) {
     std::shared_ptr<std::vector<uint>> resultSet = std::make_shared<std::vector<uint>>();
 
-    if (indexes.size() == 1) {
+    if (indexes.Size() == 1) {
         std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
-        for (uint i = 0; i < indexes.get_range_by_index(0)->size(); i++) {
-            result->push_back(indexes.get_range_by_index(0)->operator[](i));
+        for (uint i = 0; i < indexes.GetRangeByIndex(0)->size(); i++) {
+            result->push_back(indexes.GetRangeByIndex(0)->operator[](i));
         }
 
         return result;
     }
 
     // indexes.sizes();
-    leapfrog_join(indexes, *resultSet);
+    LeapfrogJoin(indexes, *resultSet);
     // std::cout << "resultSet: " << resultSet->size() << std::endl;
     // sleep(1);
 

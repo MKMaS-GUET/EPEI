@@ -7,35 +7,35 @@
 #include <vector>
 
 class Result {
-    uint* _start;
-    uint _size;
-    bool _in_mem = false;
+    uint* start_;
+    uint size_;
+    bool in_mem_ = false;
 
    public:
     int id = -1;
-    Result() : _start(nullptr), _size(0) {}
+    Result() : start_(nullptr), size_(0) {}
 
-    Result(uint* start, uint size) : _start(start), _size(size) {}
+    Result(uint* start, uint size) : start_(start), size_(size) {}
 
-    Result(uint* start, uint size, bool in_mem) : _start(start), _size(size), _in_mem(in_mem) {}
+    Result(uint* start, uint size, bool in_mem) : start_(start), size_(size), in_mem_(in_mem) {}
 
     ~Result() {
-        if (_in_mem && _start) {
-            delete[] _start;  // 释放数组
-            _start = nullptr;
+        if (in_mem_ && start_) {
+            delete[] start_;  // 释放数组
+            start_ = nullptr;
         }
     }
 
     class Iterator {
-        uint* ptr;
+        uint* ptr_;
 
        public:
-        Iterator() : ptr(nullptr) {}
-        Iterator(uint* p) : ptr(p) {}
-        Iterator(const Iterator& it) : ptr(it.ptr) {}
+        Iterator() : ptr_(nullptr) {}
+        Iterator(uint* p) : ptr_(p) {}
+        Iterator(const Iterator& it) : ptr_(it.ptr_) {}
 
         Iterator& operator++() {
-            ++ptr;
+            ++ptr_;
             return *this;
         }
         Iterator operator++(int) {
@@ -43,138 +43,138 @@ class Result {
             operator++();
             return tmp;
         }
-        uint operator-(Result::Iterator r_it) { return ptr - r_it.ptr; }
-        Iterator operator-(int num) { return Iterator(ptr - num); }
-        Iterator operator+(int num) { return Iterator(ptr + num); }
-        bool operator==(const Iterator& rhs) const { return ptr == rhs.ptr; }
-        bool operator!=(const Iterator& rhs) const { return ptr != rhs.ptr; }
-        bool operator<(const Iterator& rhs) const { return ptr < rhs.ptr; }
-        uint& operator*() { return *ptr; }
+        uint operator-(Result::Iterator r_it) { return ptr_ - r_it.ptr_; }
+        Iterator operator-(int num) { return Iterator(ptr_ - num); }
+        Iterator operator+(int num) { return Iterator(ptr_ + num); }
+        bool operator==(const Iterator& rhs) const { return ptr_ == rhs.ptr_; }
+        bool operator!=(const Iterator& rhs) const { return ptr_ != rhs.ptr_; }
+        bool operator<(const Iterator& rhs) const { return ptr_ < rhs.ptr_; }
+        uint& operator*() { return *ptr_; }
     };
 
-    Iterator begin() { return Iterator(_start); }
-    Iterator end() { return Iterator(_start + _size); }
+    Iterator begin() { return Iterator(start_); }
+    Iterator end() { return Iterator(start_ + size_); }
     uint& operator[](uint i) {
-        if (i >= 0 && i < _size) {
-            return *(_start + i);
+        if (i >= 0 && i < size_) {
+            return *(start_ + i);
         }
-        return *_start;
+        return *start_;
     }
 
-    uint size() { return _size; }
+    uint size() { return size_; }
 };
 
 class ResultList {
-    std::vector<std::shared_ptr<Result>> results;
+    std::vector<std::shared_ptr<Result>> results_;
 
-    std::vector<Result::Iterator> vector_current_pos;
+    std::vector<Result::Iterator> vector_current_pos_;
 
    public:
-    void clear() {
-        results.clear();
-        vector_current_pos.clear();
+    void Clear() {
+        results_.clear();
+        vector_current_pos_.clear();
     }
 
-    void sizes() {
-        for (long unsigned int i = 0; i < results.size(); i++) {
-            std::cout << results[i]->size() << " ";
+    void Sizes() {
+        for (long unsigned int i = 0; i < results_.size(); i++) {
+            std::cout << results_[i]->size() << " ";
         }
         std::cout << std::endl;
     }
 
-    ResultList() { results = std::vector<std::shared_ptr<Result>>(); }
+    ResultList() { results_ = std::vector<std::shared_ptr<Result>>(); }
 
-    bool add_vectors(std::vector<std::shared_ptr<Result>> ranges) {
+    bool AddVectors(std::vector<std::shared_ptr<Result>> ranges) {
         for (std::vector<std::shared_ptr<Result>>::iterator it = ranges.begin(); it != ranges.end(); it++) {
             if ((*it)->size() == 0)
                 return 0;
-            add_vector(*it);
+            AddVector(*it);
         }
         return 1;
     }
 
-    std::shared_ptr<Result> shortest() {
+    std::shared_ptr<Result> Shortest() {
         long unsigned int min_i = 0;
-        long unsigned int min = results[0]->size();
-        for (long unsigned int i = 0; i < results.size(); i++) {
-            if (results[i]->size() < min) {
-                min = results[i]->size();
+        long unsigned int min = results_[0]->size();
+        for (long unsigned int i = 0; i < results_.size(); i++) {
+            if (results_[i]->size() < min) {
+                min = results_[i]->size();
                 min_i = i;
             }
         }
-        return results[min_i];
+        return results_[min_i];
     }
 
-    void add_vector(std::shared_ptr<Result> range) {
-        if (results.size() == 0) {
-            results.push_back(range);
+    void AddVector(std::shared_ptr<Result> range) {
+        if (results_.size() == 0) {
+            results_.push_back(range);
             return;
         }
 
         uint first_val = range->operator[](0);
-        for (long unsigned int i = 0; i < results.size(); i++) {
-            if (results[i]->operator[](0) > first_val) {
-                results.insert(results.begin() + i, range);
+        for (long unsigned int i = 0; i < results_.size(); i++) {
+            if (results_[i]->operator[](0) > first_val) {
+                results_.insert(results_.begin() + i, range);
                 return;
             }
         }
 
-        results.push_back(range);
+        results_.push_back(range);
     }
 
-    void update_current_postion() {
-        for (long unsigned int i = 0; i < results.size(); i++) {
-            vector_current_pos.push_back(results[i]->begin());
+    void UpdateCurrentPostion() {
+        for (long unsigned int i = 0; i < results_.size(); i++) {
+            vector_current_pos_.push_back(results_[i]->begin());
         }
     }
 
-    void seek(int i, uint val) {
-        std::shared_ptr<Result> p_r = results[i];
+    void Seek(int i, uint val) {
+        std::shared_ptr<Result> p_r = results_[i];
 
-        auto it = vector_current_pos[i];
+        auto it = vector_current_pos_[i];
         auto end = p_r->end();
         for (; it < end; it = it + 2) {
             if (*it >= val) {
                 if (*(it - 1) >= val) {
-                    vector_current_pos[i] = it - 1;
+                    vector_current_pos_[i] = it - 1;
                     return;
                 }
-                vector_current_pos[i] = it;
+                vector_current_pos_[i] = it;
                 return;
             }
         }
         if (it == end) {
             if (*(it - 1) >= val) {
-                vector_current_pos[i] = it - 1;
+                vector_current_pos_[i] = it - 1;
                 return;
             }
         }
-        vector_current_pos[i] = end;
+        vector_current_pos_[i] = end;
     }
 
     // 对range顺序排序后，获取第i个range第一个值
-    uint get_current_val_of_range(int i) { return *vector_current_pos[i]; }
+    uint GetCurrentValOfRange(int i) { return *vector_current_pos_[i]; }
 
     // 更新range的起始迭代器
-    void next_val(int i) { vector_current_pos[i]++; }
+    void NextVal(int i) { vector_current_pos_[i]++; }
 
-    std::shared_ptr<Result> get_range_by_index(int i) { return results[i]; }
+    std::shared_ptr<Result> GetRangeByIndex(int i) { return results_[i]; }
 
-    bool has_empty() {
-        for (long unsigned int i = 0; i < results.size(); i++) {
-            if (results[i]->size() == 0) {
+    bool HasEmpty() {
+        for (long unsigned int i = 0; i < results_.size(); i++) {
+            if (results_[i]->size() == 0) {
                 return true;
             }
         }
         return false;
     }
 
-    bool at_end(int i) {
-        std::shared_ptr<Result> p_r = results[i];
-        return vector_current_pos[i] == p_r->end();
+    bool AtEnd(int i) {
+        std::shared_ptr<Result> p_r = results_[i];
+        return vector_current_pos_[i] == p_r->end();
     }
 
-    int size() { return results.size(); }
+    int Size() { return results_.size(); }
 };
 
 #endif

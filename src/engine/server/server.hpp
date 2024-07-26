@@ -49,16 +49,16 @@ std::string execute_query(std::string& sparql, nlohmann::json& res) {
     auto parser = std::make_shared<SPARQLParser>(sparql);
 
     // generate query plan
-    auto query_plan = std::make_shared<QueryPlan>(db_index, parser->triple_list(), parser->limit());
+    auto query_plan = std::make_shared<QueryPlan>(db_index, parser->TripleList(), parser->Limit());
 
     // execute query
     auto executor = std::make_shared<QueryExecutor>(db_index, query_plan);
 
-    executor->query();
+    executor->Query();
 
-    std::vector<std::vector<uint>> results_id = executor->result();
+    std::vector<std::vector<uint>> results_id = executor->query_result();
 
-    auto variables = parser->project_variables();
+    auto variables = parser->ProjectVariables();
 
     auto finish = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> diff = finish - start;
@@ -92,9 +92,9 @@ void info(const httplib::Request& req, httplib::Response& res) {
     std::unordered_map<std::string, uint32_t> data;
 
     if (db_index) {
-        data["triplets"] = db_index->get_triplet_cnt();
-        data["predicates"] = db_index->get_predicate_cnt();
-        data["entities"] = db_index->get_entity_cnt();
+        data["triplets"] = db_index->GetTripletCnt();
+        data["predicates"] = db_index->GetPredicateCnt();
+        data["entities"] = db_index->GetEntityCnt();
     }
 
     nlohmann::json j;
@@ -141,7 +141,7 @@ void create(const httplib::Request& req, httplib::Response& res) {
     std::string file_name = body["file_name"];
     std::cout << "db_name: " << db_name << ", file_name: " << file_name << std::endl;
     IndexBuilder builder(db_name, file_name);
-    if (!builder.build()) {
+    if (!builder.Build()) {
         std::cerr << "Building index data failed, terminal the process." << std::endl;
         exit(1);
     }

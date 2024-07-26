@@ -9,7 +9,7 @@ query_file_suffix=          # the suffix of the query file (e.g. `.in`, `.sql`, 
 database_name=wiki              # database name
 
 # binary executable for query
-EXE=./ppfi
+EXE=./epei
 
 # set output folder, {result_output_folder}/{query_file_type}{query_file_num}{output_file_suffix}
 result_output_folder=./result/wiki       # the path of the output file folder
@@ -25,7 +25,7 @@ do
     rslt_path="${result_output_folder}/${file_type}${output_file_suffix}"
     if [ -f $file_path ]; then
         echo query $database_name $file_path
-        $EXE query -db $database_name -f $file_path >> $rslt_path
+        $EXE query --db $database_name -f $file_path >> $rslt_path
     else
         echo "$file_path does not exist."
     fi
