@@ -55,7 +55,7 @@ Args:
   -h, --help      Show this help message and exit.
   --db, --name <NAME>    Specify the database name.
   -f, --file <FILE>    Specify the RDF data file path.
-
+```
 
 Build RDF database:
 
@@ -71,7 +71,7 @@ sparql:
 epei query --db <rdf_db_name> -f <sparql_file_name>
 ```
 
-Run http  server:
+Run http server:
 
 ```shell
 epei server --port <server port>
