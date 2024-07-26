@@ -1,6 +1,6 @@
 # EPEI
 
-An RDF Retrival System with **P**ath-Based **P**lan and **F**ast **I**ndexing
+An RDF Retrieval System Based on **E**fficient **P**redicate-**E**ntity **I**ndexing
 
 A Vue front-end is avaiable  [here](https://github.com/LiuYipeng42/RDF_Retrieval_System).
 
@@ -41,7 +41,7 @@ Download the RDF data and queries that we want to use:
 ## How to use
 
 ```
-Usage: epei <command> [<args>]
+Usage: epei <command> <args>
 
 Description:
   Common commands for various situations using EPEI.
@@ -51,22 +51,16 @@ Commands:
   query      Query the SPARQL statement for the given file path.
   server     Start the EPEI server.
 
-Options:
+Args:
   -h, --help      Show this help message and exit.
+  --db, --name <NAME>    Specify the database name.
+  -f, --file <FILE>    Specify the RDF data file path.
 
-Command-specific options:
-  build:
-    -n, --name <NAME>    Specify the database name.
-    -f, --file <FILE>    Specify the RDF data file path.
-
-Positional Arguments:
-  command       The command to run (e.g., build, query, server).
-```
 
 Build RDF database:
 
 ```shell
-epei build -n <rdf_db_name> -f <rdf_file_name>
+epei build --db <rdf_db_name> -f <rdf_file_name>
 ```
 
 Execute SPARQL query:
@@ -74,43 +68,12 @@ Execute SPARQL query:
 sparql:
 
 ```shell
-Usage: sparql [options]
-
-Description:
-  Run a SPARQL query.
-
-Options:
-  -h, --help     Show this help message and exit.        
-```
-
-file:
-
-```shell
-Usage: file [options] [arguments]
-
-Description:
-  Run SPARQL queries from a file and output the results to a file.
-
-Options:
-  -i, --input <file>    Specify the input file containing SPARQL queries.
-  -o, --output [file]   Specify the output file for the query results.   
+epei query --db <rdf_db_name> -f <sparql_file_name>
 ```
 
 Run http  server:
 
 ```shell
-Usage: epei server [-p,--port PORT]
-
-Description:
-  Start the HTTP server for EPEI.
-
-Options:
-  -p, --port <PORT>   Specify the HTTP server port.
-
-Optional Arguments:
-  -h, --help          Show this help message and exit.
-
-Examples:
-  epei server --port 8080
+epei server --port <server port>
 ```
 

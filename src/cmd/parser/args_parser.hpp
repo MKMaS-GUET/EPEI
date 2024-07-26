@@ -59,12 +59,8 @@ class ArgsParser {
         "\n"
         "args:\n"
         "  -h, --help      Show this help message and exit.\n"
-        "  -db, --name <NAME>    Specify the database name.\n"
-        "  -f, --file <FILE>    Specify the RDF data file path.\n"
-
-        "\n"
-        "Positional Arguments:\n"
-        "  command       The command to run (e.g., build, query, server).\n";
+        "  --db, --name <NAME>    Specify the database name.\n"
+        "  -f, --file <FILE>    Specify the RDF data file path.\n";
 
    private:
     std::unordered_map<std::string, std::string> arguments_;
