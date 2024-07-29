@@ -20,8 +20,8 @@
 #include "query/query_plan.hpp"
 #include "query/query_result.hpp"
 #include "server/server.hpp"
-#include "store/build_index.hpp"
-#include "store/index.hpp"
+#include "store/index_builder.hpp"
+#include "store/index_retriever.hpp"
 
 class epei::Engine::Impl {
    public:
@@ -40,7 +40,7 @@ class epei::Engine::Impl {
     }
 
     void ExecuteSparql(std::vector<std::string> sparqls,
-                        std::shared_ptr<Index> index,
+                        std::shared_ptr<IndexRetriever> index,
                         std::string file_name) {
         std::ofstream output_file;
         std::ios::sync_with_stdio(false);
@@ -114,7 +114,7 @@ class epei::Engine::Impl {
 
     void Query(const std::string& name, const std::string& file) {
         if (name != "" and file != "") {
-            std::shared_ptr<Index> index = std::make_shared<Index>(name);
+            std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(name);
             std::ifstream in(file, std::ifstream::in);
             std::vector<std::string> sparqls;
             if (in.is_open()) {

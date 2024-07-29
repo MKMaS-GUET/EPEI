@@ -15,11 +15,11 @@
 #include "../query/query_executor.hpp"
 #include "../query/query_plan.hpp"
 #include "../query/query_result.hpp"
-#include "../store//build_index.hpp"
+#include "../store/index_builder.hpp"
 #include "../store/index.hpp"
 
 std::string db_name;
-std::shared_ptr<Index> db_index;
+std::shared_ptr<IndexRetriever> db_index;
 
 std::vector<std::string> list_db() {
     std::vector<std::string> rdf_db_list;
@@ -92,9 +92,9 @@ void info(const httplib::Request& req, httplib::Response& res) {
     std::unordered_map<std::string, uint32_t> data;
 
     if (db_index) {
-        data["triplets"] = db_index->GetTripletCnt();
-        data["predicates"] = db_index->GetPredicateCnt();
-        data["entities"] = db_index->GetEntityCnt();
+        data["triplets"] = db_index->triplet_cnt();
+        data["predicates"] = db_index->predicate_cnt();
+        // data["entities"] = db_index->();
     }
 
     nlohmann::json j;
@@ -181,7 +181,7 @@ void load_db(const httplib::Request& req, httplib::Response& res) {
     if (db_name != "")
         db_index->close();
 
-    db_index = std::make_shared<Index>(new_db_name);
+    db_index = std::make_shared<IndexRetriever>(new_db_name);
     phmap::flat_hash_set<std::string> entities;
 
     db_name = new_db_name;

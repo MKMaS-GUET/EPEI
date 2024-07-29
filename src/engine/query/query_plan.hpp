@@ -7,10 +7,13 @@
 #include <string>
 #include <vector>
 
-#include "../store/index.hpp"
+#include "result.hpp"
+#include "../store/index_retriever.hpp"
 #include "leapfrog_join.hpp"
 
-using AdjacencyList = phmap::flat_hash_map<std::string, std::vector<std::pair<std::string, uint>>>;
+using Result = ResultList::Result;
+
+using AdjacencyList = hash_map<std::string, std::vector<std::pair<std::string, uint>>>;
 
 class QueryPlan {
    public:
@@ -19,9 +22,9 @@ class QueryPlan {
 
     struct Item {
         enum TypeT { kPS, kPO, kNone };
-        TypeT search_type_;           // mark the current search type
+        TypeT search_type_;            // mark the current search type
         uint search_code_;             // search this code from corresponding index according to
-                                      // `curr_search_type_`
+                                       // `curr_search_type_`
         size_t candidate_result_idx_;  // the next value location index
         // 一对迭代器，第一个是起始位置，第二个是结束位置
         // std::pair<Entity_Tree_Iterator, Entity_Tree_Iterator>
@@ -47,7 +50,7 @@ class QueryPlan {
         }
     };
 
-    QueryPlan(const std::shared_ptr<Index>& index,
+    QueryPlan(const std::shared_ptr<IndexRetriever>& index,
               const std::vector<std::vector<std::string>>& triple_list,
               size_t limit_)
         : limit_(limit_) {
@@ -56,7 +59,7 @@ class QueryPlan {
 
     void DFS(const AdjacencyList& graph,
              std::string vertex,
-             phmap::flat_hash_map<std::string, bool>& visited,
+             hash_map<std::string, bool>& visited,
              AdjacencyList& tree,
              std::vector<std::string>& currentPath,
              std::vector<std::vector<std::string>>& allPaths) {
@@ -91,10 +94,10 @@ class QueryPlan {
 
     std::vector<std::vector<std::string>> FindAllPathsInGraph(const AdjacencyList& graph,
                                                               const std::string& root) {
-        phmap::flat_hash_map<std::string, bool> visited;  // Track visited vertices
-        AdjacencyList tree;                               // The resulting spanning tree
-        std::vector<std::string> currentPath;             // Current path from the root to the current vertex
-        std::vector<std::vector<std::string>> allPaths;   // All paths from the root to the leaves
+        hash_map<std::string, bool> visited;             // Track visited vertices
+        AdjacencyList tree;                              // The resulting spanning tree
+        std::vector<std::string> currentPath;            // Current path from the root to the current vertex
+        std::vector<std::vector<std::string>> allPaths;  // All paths from the root to the leaves
 
         // Initialize visited map
         for (const auto& pair : graph) {
@@ -108,11 +111,11 @@ class QueryPlan {
         return allPaths;
     }
 
-    void Generate(const std::shared_ptr<Index>& index,
+    void Generate(const std::shared_ptr<IndexRetriever>& index,
                   const std::vector<std::vector<std::string>>& triple_list) {
         AdjacencyList query_graph_ud;
-        phmap::flat_hash_map<std::string, uint> est_size;
-        phmap::flat_hash_map<std::string, uint> univariates;
+        hash_map<std::string, uint> est_size;
+        hash_map<std::string, uint> univariates;
 
         for (size_t i = 0; i < triple_list.size(); ++i) {
             const auto& triple = triple_list[i];
@@ -127,7 +130,7 @@ class QueryPlan {
 
             if (s[0] == '?' && o[0] == '?') {
                 vertex1 = s;
-                edge = index->predicate2id[p];
+                edge = index->String2ID(p, Pos::PREDICATE);
                 vertex2 = o;
                 // only support ?v predicate ?v
                 size = index->GetSSetSize(edge);
@@ -140,23 +143,25 @@ class QueryPlan {
                 }
             } else if (s[0] == '?' && p[0] == '?') {
                 vertex1 = s;
-                edge = index->GetEntityID(o);
+                edge = index->String2ID(o, Pos::OBJECT);
                 vertex2 = p;
             } else if (p[0] == '?' && o[0] == '?') {
                 vertex1 = p;
-                edge = index->GetEntityID(s);
+                edge = index->String2ID(s, Pos::SUBJECT);
                 vertex2 = o;
             } else {
                 if (s[0] == '?') {
                     univariates[s] += 1;
-                    size = index->GetByPoSize(index->predicate2id[p], index->GetEntityID(o));
+                    size = index->GetByPOSize(index->String2ID(p, Pos::PREDICATE),
+                                              index->String2ID(o, Pos::OBJECT));
                     if (est_size[s] == 0 || est_size[s] > size) {
                         est_size[s] = size;
                     }
                 }
                 if (o[0] == '?') {
                     univariates[o] += 1;
-                    size = index->GetByPoSize(index->predicate2id[p], index->GetEntityID(o));
+                    size = index->GetByPOSize(index->String2ID(p, Pos::PREDICATE),
+                                              index->String2ID(o, Pos::OBJECT));
                     if (est_size[s] == 0 || est_size[s] > size) {
                         est_size[s] = size;
                     }
@@ -352,9 +357,9 @@ class QueryPlan {
         GenPlanTable(index, triple_list, plan);
     }
 
-    void GenPlanTable(const std::shared_ptr<Index>& index,
-                        const std::vector<std::vector<std::string>>& triple_list,
-                        std::vector<std::string>& variables) {
+    void GenPlanTable(const std::shared_ptr<IndexRetriever>& index,
+                      const std::vector<std::vector<std::string>>& triple_list,
+                      std::vector<std::string>& variables) {
         for (size_t i = 0; i < variables.size(); ++i) {
             variable_metadata_[variables[i]].first = i;
             if (debug_)
@@ -384,8 +389,8 @@ class QueryPlan {
             uint64_t var_sid = variable_metadata_[s].first;
             uint64_t var_oid = variable_metadata_[o].first;
             if (s[0] == '?' && o[0] == '?') {
-                variable_metadata_[s].second = 0;
-                variable_metadata_[o].second = 2;
+                variable_metadata_[s].second = Pos::SUBJECT;
+                variable_metadata_[o].second = Pos::OBJECT;
 
                 Item item, candidate_result_item;
 
@@ -393,7 +398,7 @@ class QueryPlan {
                 if (var_sid < var_oid) {
                     // 先在 ps 索引树上根据已知的 p 查找所有的 s
                     item.search_type_ = Item::TypeT::kPO;
-                    item.search_code_ = index->predicate2id[p];
+                    item.search_code_ = index->String2ID(p, Pos::PREDICATE);
                     // 下一步应该查询的变量的索引
                     item.candidate_result_idx_ = var_oid;
                     item.search_result_ = index->GetSSet(item.search_code_);
@@ -407,14 +412,14 @@ class QueryPlan {
                     // 先用none来占位
                     candidate_result_item.search_type_ = Item::TypeT::kNone;
                     candidate_result_item.search_code_ = item.search_code_;  // don't have the search code
-                    candidate_result_item.candidate_result_idx_ = 0;        // don't have the candidate result
+                    candidate_result_item.candidate_result_idx_ = 0;  // don't have the candidate result
                     candidate_result_item.search_result_ =
                         std::make_shared<Result>();  // initialize search range state
                     query_plan_[var_oid].push_back(candidate_result_item);
                     // none item 的索引
                     none_type_indices_[var_oid].push_back(query_plan_[var_oid].size() - 1);
                 } else {
-                    item.search_code_ = index->predicate2id[p];
+                    item.search_code_ = index->String2ID(p, Pos::PREDICATE);
                     item.search_type_ = Item::TypeT::kPS;
                     item.candidate_result_idx_ = var_sid;
                     item.search_result_ = index->GetOSet(item.search_code_);
@@ -425,7 +430,7 @@ class QueryPlan {
 
                     candidate_result_item.search_type_ = Item::TypeT::kNone;
                     candidate_result_item.search_code_ = item.search_code_;  // don't have the search code
-                    candidate_result_item.candidate_result_idx_ = 0;        // don't have the candidate result
+                    candidate_result_item.candidate_result_idx_ = 0;  // don't have the candidate result
                     candidate_result_item.search_result_ =
                         std::make_shared<Result>();  // initialize search range state
                     query_plan_[var_sid].push_back(candidate_result_item);
@@ -434,9 +439,9 @@ class QueryPlan {
             }
             // handle the situation of (?s p o)
             else if (s[0] == '?') {
-                variable_metadata_[s].second = 0;
-                uint oid = index->GetEntityID(o);
-                uint pid = index->predicate2id[p];
+                variable_metadata_[s].second = Pos::SUBJECT;
+                uint oid = index->String2ID(o, Pos::OBJECT);
+                uint pid = index->String2ID(p, Pos::PREDICATE);
                 std::shared_ptr<Result> r = index->GetByPO(pid, oid);
                 r->id = range_cnt;
                 prestore_result_[var_sid].push_back(r);
@@ -444,9 +449,9 @@ class QueryPlan {
             }
             // handle the situation of (s p ?o)
             else if (o[0] == '?') {
-                variable_metadata_[o].second = 0;
-                uint sid = index->GetEntityID(s);
-                uint pid = index->predicate2id[p];
+                variable_metadata_[o].second = Pos::OBJECT;
+                uint sid = index->String2ID(s, Pos::SUBJECT);
+                uint pid = index->String2ID(p, Pos::PREDICATE);
                 std::shared_ptr<Result> r = index->GetByPS(pid, sid);
                 r->id = range_cnt;
                 prestore_result_[var_oid].push_back(r);
@@ -495,12 +500,12 @@ class QueryPlan {
         }
     }
 
-    [[nodiscard]] const phmap::flat_hash_map<std::string, std::pair<uint, uint>>& variable_metadata() const {
+    [[nodiscard]] const hash_map<std::string, std::pair<uint, Pos>>& variable_metadata() const {
         return variable_metadata_;
     }
 
-    std::vector<std::pair<uint, uint>> MappingVariable(const std::vector<std::string>& variables) {
-        std::vector<std::pair<uint, uint>> ret;
+    std::vector<std::pair<uint, Pos>> MappingVariable(const std::vector<std::string>& variables) {
+        std::vector<std::pair<uint, Pos>> ret;
         ret.reserve(variables.size());
         for (const auto& var : variables) {
             ret.emplace_back(variable_metadata_.at(var));
@@ -520,7 +525,7 @@ class QueryPlan {
     // 二维数组，变量的优先级顺序id -> 此变量在不同的三元组中的查询结果
     std::vector<std::vector<Item>> query_plan_;
     // v -> (priority, pos)
-    phmap::flat_hash_map<std::string, std::pair<uint, uint>> variable_metadata_;
+    hash_map<std::string, std::pair<uint, Pos>> variable_metadata_;
 };
 
 #endif  // COMBINED_CODE_INDEX_GEN_PLAN_HPP

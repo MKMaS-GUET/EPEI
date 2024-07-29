@@ -15,8 +15,7 @@
 #include <utility>
 #include <vector>
 #include "../parser/sparql_parser.hpp"
-#include "../store/index.hpp"
-#include "../tools/thread_pool.hpp"
+#include "../store/index_retriever.hpp"
 #include "leapfrog_join.hpp"
 #include "query_plan.hpp"
 
@@ -75,15 +74,15 @@ struct OutputStat {
 };
 
 class QueryExecutor {
-
    public:
-    QueryExecutor(const std::shared_ptr<Index>& p_index, const std::shared_ptr<QueryPlan>& p_query_plan)
+    QueryExecutor(const std::shared_ptr<IndexRetriever>& p_index,
+                  const std::shared_ptr<QueryPlan>& p_query_plan)
         : _stat(p_query_plan->query_plan()),
           _p_index(p_index),
           _p_query_plan(p_query_plan),
           _prestore_result(p_query_plan->prestore_result_) {}
 
-    QueryExecutor(const std::shared_ptr<Index>& p_index,
+    QueryExecutor(const std::shared_ptr<IndexRetriever>& p_index,
                   const std::shared_ptr<QueryPlan>& p_query_plan,
                   const std::shared_ptr<std::vector<std::string>>& p_project_variables)
         : _stat(p_query_plan->query_plan()),
@@ -365,15 +364,14 @@ class QueryExecutor {
    private:
     Stat _stat;
     OutputStat _output_stat;
-    std::shared_ptr<Index> _p_index;
+    std::shared_ptr<IndexRetriever> _p_index;
     std::shared_ptr<QueryPlan> _p_query_plan;
     std::vector<std::vector<std::shared_ptr<Result>>> _prestore_result;
     std::shared_ptr<std::vector<std::string>> _p_project_variables;
 
     std::chrono::system_clock::time_point _query_begin_time, _query_end_time;
 
-    phmap::flat_hash_map<std::string, std::shared_ptr<std::vector<uint>>> _pre_join_result;
+    hash_map<std::string, std::shared_ptr<std::vector<uint>>> _pre_join_result;
 };
 
 #endif  // QUERY_EXECUTOR_HPP
-

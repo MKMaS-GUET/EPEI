@@ -6,6 +6,9 @@
 #include <unistd.h>
 #include <string>
 
+template <typename Key, typename Value>
+using hash_map = phmap::flat_hash_map<Key, Value>;
+
 template <typename T>
 struct MMap {
     T* map_;

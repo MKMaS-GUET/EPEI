@@ -6,70 +6,67 @@
 #include <string>
 #include <vector>
 
-class Result {
-    uint* start_;
-    uint size_;
-    bool in_mem_ = false;
-
-   public:
-    int id = -1;
-    Result() : start_(nullptr), size_(0) {}
-
-    Result(uint* start, uint size) : start_(start), size_(size) {}
-
-    Result(uint* start, uint size, bool in_mem) : start_(start), size_(size), in_mem_(in_mem) {}
-
-    ~Result() {
-        if (in_mem_ && start_) {
-            delete[] start_;  // 释放数组
-            start_ = nullptr;
-        }
-    }
-
-    class Iterator {
-        uint* ptr_;
-
-       public:
-        Iterator() : ptr_(nullptr) {}
-        Iterator(uint* p) : ptr_(p) {}
-        Iterator(const Iterator& it) : ptr_(it.ptr_) {}
-
-        Iterator& operator++() {
-            ++ptr_;
-            return *this;
-        }
-        Iterator operator++(int) {
-            Iterator tmp(*this);
-            operator++();
-            return tmp;
-        }
-        uint operator-(Result::Iterator r_it) { return ptr_ - r_it.ptr_; }
-        Iterator operator-(int num) { return Iterator(ptr_ - num); }
-        Iterator operator+(int num) { return Iterator(ptr_ + num); }
-        bool operator==(const Iterator& rhs) const { return ptr_ == rhs.ptr_; }
-        bool operator!=(const Iterator& rhs) const { return ptr_ != rhs.ptr_; }
-        bool operator<(const Iterator& rhs) const { return ptr_ < rhs.ptr_; }
-        uint& operator*() { return *ptr_; }
-    };
-
-    Iterator begin() { return Iterator(start_); }
-    Iterator end() { return Iterator(start_ + size_); }
-    uint& operator[](uint i) {
-        if (i >= 0 && i < size_) {
-            return *(start_ + i);
-        }
-        return *start_;
-    }
-
-    uint size() { return size_; }
-};
 
 class ResultList {
-    std::vector<std::shared_ptr<Result>> results_;
-
-    std::vector<Result::Iterator> vector_current_pos_;
-
    public:
+    class Result {
+        uint* start_;
+        uint size_;
+        bool in_mem_ = false;
+
+       public:
+        int id = -1;
+        Result() : start_(nullptr), size_(0) {}
+
+        Result(uint* start, uint size) : start_(start), size_(size) {}
+
+        Result(uint* start, uint size, bool in_mem) : start_(start), size_(size), in_mem_(in_mem) {}
+
+        ~Result() {
+            if (in_mem_ && start_) {
+                delete[] start_;  // 释放数组
+                start_ = nullptr;
+            }
+        }
+
+        class Iterator {
+            uint* ptr_;
+
+           public:
+            Iterator() : ptr_(nullptr) {}
+            Iterator(uint* p) : ptr_(p) {}
+            Iterator(const Iterator& it) : ptr_(it.ptr_) {}
+
+            Iterator& operator++() {
+                ++ptr_;
+                return *this;
+            }
+            Iterator operator++(int) {
+                Iterator tmp(*this);
+                operator++();
+                return tmp;
+            }
+            uint operator-(Result::Iterator r_it) { return ptr_ - r_it.ptr_; }
+            Iterator operator-(int num) { return Iterator(ptr_ - num); }
+            Iterator operator+(int num) { return Iterator(ptr_ + num); }
+            bool operator==(const Iterator& rhs) const { return ptr_ == rhs.ptr_; }
+            bool operator!=(const Iterator& rhs) const { return ptr_ != rhs.ptr_; }
+            bool operator<(const Iterator& rhs) const { return ptr_ < rhs.ptr_; }
+            uint& operator*() { return *ptr_; }
+        };
+
+        Iterator begin() { return Iterator(start_); }
+        Iterator end() { return Iterator(start_ + size_); }
+        uint& operator[](uint i) {
+            if (i >= 0 && i < size_) {
+                return *(start_ + i);
+            }
+            return *start_;
+        }
+
+        uint size() { return size_; }
+    };
+
     void Clear() {
         results_.clear();
         vector_current_pos_.clear();
@@ -175,6 +172,11 @@ class ResultList {
     }
 
     int Size() { return results_.size(); }
+
+   private:
+    std::vector<std::shared_ptr<Result>> results_;
+
+    std::vector<Result::Iterator> vector_current_pos_;
 };
 
 #endif

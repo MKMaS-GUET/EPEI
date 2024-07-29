@@ -1,5 +1,5 @@
-#ifndef BUILD_INDEX_HPP
-#define BUILD_INDEX_HPP
+#ifndef INDEX_BUILDER_HPP
+#define INDEX_BUILDER_HPP
 
 #include <fcntl.h>
 #include <malloc.h>
@@ -18,126 +18,12 @@
 #include <thread>
 #include <vector>
 
+#include "index.hpp"
 #include "mmap.hpp"
 
 #define MAX_SIZE 20000
 
 namespace fs = std::filesystem;
-using phmap::btree_map;
-using phmap::flat_hash_map;
-using phmap::flat_hash_set;
-using std::pair;
-
-template <typename T>
-class Node {
-   public:
-    std::vector<T> elements_;
-    Node<T>* next_ = nullptr;
-
-    Node() : elements_() {}
-
-    Node(int reverse_size) { elements_.reserve(reverse_size); }
-};
-
-template <typename T>
-class LinkedArray : public Node<T> {
-   public:
-    void Add(Node<T>* target_node, T e) {
-        if (target_node->elements_.size() == 0) {
-            target_node->elements_.push_back(e);
-            return;
-        }
-
-        auto iter = std::lower_bound(target_node->elements_.begin(), target_node->elements_.end(), e,
-                                     [](T a, T b) { return a < b; });
-        if (iter == target_node->elements_.end()) {
-            target_node->elements_.push_back(e);
-        } else {
-            if (*iter != e)
-                target_node->elements_.insert(iter, e);
-        }
-    }
-
-    void MoveHalf(Node<T>* source_node, Node<T>* target_node) {
-        auto middle = source_node->elements_.begin() + source_node->elements_.size() / 2;
-
-        std::move(std::make_move_iterator(middle), std::make_move_iterator(source_node->elements_.end()),
-                  std::back_inserter(target_node->elements_));
-
-        source_node->elements_.erase(middle, source_node->elements_.end());
-    }
-
-    void AddByOrder(T e) {
-        if (this->elements_.size() == 0) {
-            this->elements_.push_back(e);
-            return;
-        }
-
-        Node<T>* current_node = this;
-        while (true) {
-            if (current_node->elements_.back() >= e) {
-                Add(current_node, e);
-                // size++;
-                if (current_node->elements_.size() == MAX_SIZE) {
-                    Node<T>* new_node = new Node<T>(MAX_SIZE / 2);
-                    new_node->next_ = current_node->next_;
-                    current_node->next_ = new_node;
-                    MoveHalf(current_node, new_node);
-                }
-                return;
-            }
-
-            if (current_node->next_ == NULL) {
-                break;
-            }
-            current_node = current_node->next_;
-        }
-
-        current_node->elements_.push_back(e);
-        // size++;
-        if (current_node->elements_.size() == MAX_SIZE) {
-            Node<T>* new_node = new Node<T>(MAX_SIZE / 2);
-            new_node->next_ = current_node->next_;
-            current_node->next_ = new_node;
-            MoveHalf(current_node, new_node);
-        }
-    }
-};
-
-struct PredicateIndex {
-    phmap::btree_set<uint> s_set_;
-    phmap::btree_set<uint> o_set_;
-
-    void Build(std::vector<pair<uint, uint>>& so_pairs) {
-        for (const auto& so : so_pairs) {
-            s_set_.insert(so.first);
-            o_set_.insert(so.second);
-        }
-    }
-
-    void Clear() {
-        phmap::btree_set<uint>().swap(s_set_);
-        phmap::btree_set<uint>().swap(o_set_);
-    }
-};
-
-// index for a predicate
-struct EntityIndex {
-    flat_hash_map<uint, LinkedArray<uint>> s_to_o_;
-    flat_hash_map<uint, LinkedArray<uint>> o_to_s_;
-
-    void Build(std::vector<pair<uint, uint>>& so_pairs) {
-        for (const auto& so : so_pairs) {
-            s_to_o_[so.first].AddByOrder(so.second);
-            o_to_s_[so.second].AddByOrder(so.first);
-        }
-    }
-
-    void Clear() {
-        flat_hash_map<uint, LinkedArray<uint>>().swap(s_to_o_);
-        flat_hash_map<uint, LinkedArray<uint>>().swap(o_to_s_);
-    }
-};
 
 class IndexBuilder {
     std::string data_file_;
@@ -166,9 +52,9 @@ class IndexBuilder {
 
     std::mutex mtx;
 
-    std::vector<pair<uint, uint>> _predicate_rank;
+    std::vector<std::pair<uint, uint>> _predicate_rank;
 
-    flat_hash_map<uint, std::vector<pair<uint, uint>>> _pso;
+    hash_map<uint, std::vector<std::pair<uint, uint>>> _pso;
 
     // e_id -> (s_to_p, o_to_p)
     std::vector<std::pair<uint, uint>> _predicate_map_file_offset;
@@ -193,7 +79,7 @@ class IndexBuilder {
     bool Build() {
         std::cout << "Indexing ..." << std::endl;
 
-        flat_hash_map<std::string, uint> entity2id;
+        hash_map<std::string, uint> entity2id;
 
         LoadData(entity2id);
 
@@ -202,7 +88,7 @@ class IndexBuilder {
         // predict -> (o_set, s_set)
         std::vector<PredicateIndex> predicate_indexes(predicate_cnt_);
         // e -> (s_to_p, o_to_p)
-        // _e_to_p = std::vector<std::pair<std::vector<uint>, std::vector<uint>>>(entity_cnt_);
+        // _e_to_p = std::vector<std::std::pair<std::vector<uint>, std::vector<uint>>>(entity_cnt_);
         // first: PS_PREDICATE_MAP file offset  second: PO_PREDICATE_MAP file offset
         _predicate_map_file_offset = std::vector<std::pair<uint, uint>>(entity_cnt_);
 
@@ -227,7 +113,7 @@ class IndexBuilder {
         return true;
     }
 
-    void LoadData(flat_hash_map<std::string, uint>& entity2id) {
+    void LoadData(hash_map<std::string, uint>& entity2id) {
         auto beg = std::chrono::high_resolution_clock::now();
 
         std::ifstream::sync_with_stdio(false);
@@ -249,10 +135,10 @@ class IndexBuilder {
             entity_outs[i].tie(nullptr);
         }
 
-        // flat_hash_map<std::string, uint> entity2id;
-        flat_hash_map<std::string, uint> predicate2id;
+        // hash_map<std::string, uint> entity2id;
+        hash_map<std::string, uint> predicate2id;
 
-        std::pair<flat_hash_map<std::string, uint>::iterator, bool> ret;
+        std::pair<hash_map<std::string, uint>::iterator, bool> ret;
 
         std::string s, p, o;
         while (fin >> s >> p) {
@@ -313,89 +199,6 @@ class IndexBuilder {
         std::cout << "load data takes " << diff.count() << " ms." << std::endl;
     }
 
-    // void serialize_entity2id(flat_hash_map<std::string, uint>& entity2id) {
-    //     auto beg = std::chrono::high_resolution_clock::now();
-
-    //     btree_map<ulong, uint> hash2id;
-    //     flat_hash_map<ulong, std::vector<std::pair<std::string, uint>>> conflicts;
-    //     std::vector<const std::string*> id2entity;
-    //     id2entity.reserve(entity_cnt_ + 1);
-
-    //     std::pair<btree_map<ulong, uint>::iterator, bool> ret;
-    //     uint id = 0;
-    //     ulong hash;
-    //     std::hash<std::string> hash_func = std::hash<std::string>();
-    //     for (auto it = entity2id.begin(); it != entity2id.end(); it++) {
-    //         hash = hash_func(it->first);
-    //         ret = hash2id.insert({hash, it->second});
-    //         id2entity[it->second] = &it->first;
-    //         if (ret.second == false) {
-    //             // hash 碰撞
-    //             if (ret.first->second != UINT_MAX) {
-    //                 conflicts[hash] = {{*id2entity[id], id}, {it->first, it->second}};
-    //                 hash2id[hash] = UINT_MAX;
-    //             } else {
-    //                 conflicts[hash].push_back({it->first, it->second});
-    //             }
-    //         }
-    //     }
-    //     auto end = std::chrono::high_resolution_clock::now();
-    //     std::chrono::duration<double, std::milli> diff = end - beg;
-    //     std::cout << "phase 1: " << diff.count() << " ms." << std::endl;
-
-    //     MMap<uint> id2pos = MMap<uint>(db_data_path_ + "ENTITY/ID2POS", entity_cnt_ * 4);
-    //     std::ofstream entity_out =
-    //         std::ofstream(db_data_path_ + "ENTITY/STRINGS", std::ofstream::out | std::ofstream::binary);
-    //     MMap<ulong> entity_hash =
-    //         MMap<ulong>(db_data_path_ + "ENTITY/ENTITY_HASH", entity_cnt_ * 2 * 4);
-    //     MMap<uint> entity_id =
-    //         MMap<uint>(db_data_path_ + "ENTITY/ENTITY_ID", entity_cnt_ * 4);
-    //     uint size;
-    //     uint file_offset = 0;
-    //     uint hash_offset = 0;
-    //     id = 1;
-    //     for (auto hash2id_iter = hash2id.begin(); hash2id_iter != hash2id.end(); hash2id_iter++) {
-    //         size = id2entity[id]->size();
-    //         entity_out.write(id2entity[id]->c_str(), static_cast<long>(size));
-    //         id2pos[id - 1] = file_offset;
-    //         file_offset += size;
-
-    //         entity_hash[id - 1] = hash2id_iter->first;
-    //         entity_id[id - 1] = hash2id_iter->second;
-    //         id++;
-    //     }
-    //     entity_size_ = file_offset;
-    //     entity_out.close();
-    //     id2pos.CloseMap();
-    //     entity_hash.CloseMap();
-    //     entity_id.CloseMap();
-
-    //     flat_hash_map<std::string, uint>().swap(entity2id);
-    //     std::vector<const std::string*>().swap(id2entity);
-    //     malloc_trim(0);
-
-    //     if (conflicts.size() != 0) {
-    //         std::ofstream conflicts_out =
-    //             std::ofstream(db_data_path_ + "ENTITY/CONFLICTS", std::ofstream::out |
-    //             std::ofstream::binary);
-
-    //         for (auto it = conflicts.begin(); it != conflicts.end(); it++) {
-    //             std::string hash_str = std::to_string(it->first) + " ";
-    //             for (uint i = 0; i < it->second.size(); i++) {
-    //                 hash_str += it->second[i].first + " " + std::to_string(it->second[i].second) + " ";
-    //             }
-    //             hash_str += "\n";
-    //             conflicts_out.write(hash_str.c_str(), hash_str.size());
-    //         }
-
-    //         conflicts_out.close();
-    //     }
-
-    //     end = std::chrono::high_resolution_clock::now();
-    //     diff = end - beg;
-    //     std::cout << "takes " << diff.count() << " ms." << std::endl;
-    // }
-
     void CalculatePredicateRank() {
         for (uint pid = 1; pid <= predicate_cnt_; pid++) {
             _pso[pid].shrink_to_fit();
@@ -427,7 +230,7 @@ class IndexBuilder {
                 predicate_indexes[pid - 1].Build(_pso[pid]);
 
                 UpdateFileSize(predicate_indexes[pid - 1].s_set_.size(),
-                                 predicate_indexes[pid - 1].o_set_.size());
+                               predicate_indexes[pid - 1].o_set_.size());
 
                 Progress(finished, pid, info);
             }
@@ -458,9 +261,9 @@ class IndexBuilder {
     }
 
     void SubBuildPredicateIndex(std::queue<uint>* task_queue,
-                                   std::vector<PredicateIndex>* predicate_indexes,
-                                   double* finished,
-                                   std::string* info) {
+                                std::vector<PredicateIndex>* predicate_indexes,
+                                double* finished,
+                                std::string* info) {
         uint pid;
         while (task_queue->size()) {
             mtx.lock();
@@ -472,15 +275,15 @@ class IndexBuilder {
 
             mtx.lock();
             UpdateFileSize(predicate_indexes->at(pid - 1).s_set_.size(),
-                             predicate_indexes->at(pid - 1).o_set_.size());
+                           predicate_indexes->at(pid - 1).o_set_.size());
             Progress(*finished, pid, *info);
             mtx.unlock();
         }
     }
 
     void StorePredicateIndex(std::vector<PredicateIndex>& predicate_indexes,
-                               uint ps_predicate_map_size[],
-                               uint po_predicate_map_size[]) {
+                             uint ps_predicate_map_size[],
+                             uint po_predicate_map_size[]) {
         auto beg = std::chrono::high_resolution_clock::now();
 
         predicate_index_file_size_ = predicate_cnt_ * 2 * 4;
@@ -561,10 +364,8 @@ class IndexBuilder {
 
         entity_index_arrays_file_size_ = triplet_cnt_ * 2 * 4;
 
-        po_predicate_map_ =
-            MMap<uint>(db_data_path_ + "PO_PREDICATE_MAP", po_predicate_map_file_size_);
-        ps_predicate_map_ =
-            MMap<uint>(db_data_path_ + "PS_PREDICATE_MAP", ps_predicate_map_file_size_);
+        po_predicate_map_ = MMap<uint>(db_data_path_ + "PO_PREDICATE_MAP", po_predicate_map_file_size_);
+        ps_predicate_map_ = MMap<uint>(db_data_path_ + "PS_PREDICATE_MAP", ps_predicate_map_file_size_);
         entity_index_arrays_ =
             MMap<uint>(db_data_path_ + "ENTITY_INDEX_ARRAYS", entity_index_arrays_file_size_);
 
@@ -585,7 +386,7 @@ class IndexBuilder {
                 StorePredicateMaps(arrays_offset, pid, po_predicate_map_, entity_index.s_to_o_, true);
                 StorePredicateMaps(arrays_offset, pid, ps_predicate_map_, entity_index.o_to_s_, false);
 
-                std::vector<pair<uint, uint>>{}.swap(_pso[pid]);
+                std::vector<std::pair<uint, uint>>{}.swap(_pso[pid]);
                 malloc_trim(0);
 
                 Progress(finished, pid, info);
@@ -621,9 +422,9 @@ class IndexBuilder {
     }
 
     void SubBuildPredicateMaps(std::queue<uint>* task_queue,
-                                  uint* arrays_offset,
-                                  double* finished,
-                                  std::string* info) {
+                               uint* arrays_offset,
+                               double* finished,
+                               std::string* info) {
         uint pid;
         while (task_queue->size()) {
             mtx.lock();
@@ -641,16 +442,16 @@ class IndexBuilder {
             Progress(*finished, pid, *info);
             mtx.unlock();
 
-            std::vector<pair<uint, uint>>{}.swap(_pso[pid]);
+            std::vector<std::pair<uint, uint>>{}.swap(_pso[pid]);
             malloc_trim(0);
         }
     }
 
     void StorePredicateMaps(uint& arrays_offset,
-                              uint pid,
-                              MMap<uint>& vm,
-                              flat_hash_map<uint, LinkedArray<uint>>& e_to_e,
-                              bool s_to_o) {
+                            uint pid,
+                            MMap<uint>& vm,
+                            hash_map<uint, LinkedArray<uint>>& e_to_e,
+                            bool s_to_o) {
         Node<uint>* current_node;
         uint size = 0;
         uint eid = 0;

@@ -4,14 +4,14 @@
 
 #include <vector>
 #include "../parser/sparql_parser.hpp"
-#include "../store/index.hpp"
+#include "../store/index_retriever.hpp"
 #include "./query_plan.hpp"
 
 uint query_result(std::vector<std::vector<uint>>& results_id,
                   std::string& results,
-                  const std::shared_ptr<Index>& index,
-                  const std::shared_ptr<QueryPlan>& query_plan,
-                  const std::shared_ptr<SPARQLParser>& parser) {
+                  const std::shared_ptr<IndexRetriever> index,
+                  const std::shared_ptr<QueryPlan> query_plan,
+                  const std::shared_ptr<SPARQLParser> parser) {
     auto last = results_id.end();
     const auto& modifier = parser->project_modifier();
     // 获取每一个变量的id（优先级顺序）
@@ -42,7 +42,7 @@ uint query_result(std::vector<std::vector<uint>>& results_id,
         for (auto it = results_id.begin(); it != last; ++it) {
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
-                ss << index->id2entity[item[idx.first]]->c_str();
+                ss << index->ID2String(item[idx.first], idx.second);
                 ss << "";
             }
             ss << "\n";
@@ -54,9 +54,9 @@ uint query_result(std::vector<std::vector<uint>>& results_id,
 }
 
 int query_result(std::vector<std::vector<uint>>& result,
-                 const std::shared_ptr<Index>& index,
-                 const std::shared_ptr<QueryPlan>& query_plan,
-                 const std::shared_ptr<SPARQLParser>& parser) {
+                 const std::shared_ptr<IndexRetriever> index,
+                 const std::shared_ptr<QueryPlan> query_plan,
+                 const std::shared_ptr<SPARQLParser> parser) {
     auto last = result.end();
     const auto& modifier = parser->project_modifier();
     // project_variables 是要输出的变量顺序
@@ -88,7 +88,7 @@ int query_result(std::vector<std::vector<uint>>& result,
         for (auto it = result.begin(); it != last; ++it) {
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
-                std::cout << *index->id2entity[item[idx.first]] << " ";
+                std::cout << index->ID2String(item[idx.first], idx.second) << " ";
             }
             std::cout << "\n";
         }
@@ -98,9 +98,9 @@ int query_result(std::vector<std::vector<uint>>& result,
 }
 
 int query_result(std::vector<std::vector<uint>>& result,
-                 const std::shared_ptr<Index>& index,
-                 const std::shared_ptr<QueryPlan>& query_plan,
-                 const std::shared_ptr<SPARQLParser>& parser,
+                 const std::shared_ptr<IndexRetriever> index,
+                 const std::shared_ptr<QueryPlan> query_plan,
+                 const std::shared_ptr<SPARQLParser> parser,
                  std::ofstream& output_file) {
     auto last = result.end();
     const auto& modifier = parser->project_modifier();
@@ -130,7 +130,7 @@ int query_result(std::vector<std::vector<uint>>& result,
         for (auto it = result.begin(); it != last; ++it) {
             const auto& item = *it;
             for (const auto& idx : variable_indexes) {
-                output_file << *index->id2entity[item[idx.first]] << " ";
+                output_file << index->ID2String(item[idx.first], idx.second) << " ";
             }
             output_file << "\n";
         }
