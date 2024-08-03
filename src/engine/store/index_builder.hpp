@@ -260,21 +260,18 @@ class IndexBuilder {
         // 两个循环合并为一个循环
         uint cnt;
         uint offset = 0;
-        uint begin_offset = 0;
         for (uint id = 1; id <= dict.max_id(); id++) {
             cnt = po_predicate_map_size[id - 1];
-            begin_offset = (id - 1) * 2;
             predicate_map_file_offset_[id - 1].first = offset;
             // PS_PREDICATE_MAP offset
-            entity_index_[begin_offset] = offset;
+            entity_index_[(id - 1) * 2] = offset;
             offset += cnt * 3;
         }
         offset = 0;
         for (uint id = 1; id <= dict.max_id(); id++) {
             cnt = ps_predicate_map_size[id - 1];
-            begin_offset = (id - 1) * 2;
             predicate_map_file_offset_[id - 1].second = offset;
-            entity_index_[begin_offset + 1] = offset;
+            entity_index_[(id - 1) * 2 + 1] = offset;
             offset += cnt * 3;
         }
 

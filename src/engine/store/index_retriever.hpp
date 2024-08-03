@@ -1,26 +1,24 @@
 #ifndef INDEX_RETRIEVER_HPP
 #define INDEX_RETRIEVER_HPP
 
-#include <vector>
-
 #include <limits.h>
-
 #include <fstream>
 #include <iostream>
-// #include <malloc.h>
-// #include <memory>
 #include <thread>
-
+#include <vector>
 #include "../query/result.hpp"
 #include "dictionary.hpp"
 #include "mmap.hpp"
 
 using Result = ResultList::Result;
 
+enum Order { kSPO, kOPS };
+
 class IndexRetriever {
-    std::string db_index_path_;
-    std::string db_dictionary_path_;
     std::string db_name_;
+    std::string db_dictionary_path_;
+
+    std::string db_index_path_;
 
     uint predicate_index_file_size_ = 0;
     uint predicate_index_arrays_file_size_ = 0;
@@ -29,22 +27,12 @@ class IndexRetriever {
     uint ps_predicate_map_file_size_ = 0;
     uint entity_index_arrays_file_size_ = 0;
 
-    // uint triplet_cnt_ = 0;
-    // uint entity_cnt_ = 0;
-    // uint predicate_cnt_ = 0;
-    // uint entity_size_ = 0;
-
     MMap<uint> predicate_index_;
     MMap<uint> predicate_index_arrays_;
     MMap<uint> entity_index_;
     MMap<uint> ps_predicate_map_;
     MMap<uint> po_predicate_map_;
     MMap<uint> entity_index_arrays_;
-
-    Dictionary dict;
-
-    std::vector<std::shared_ptr<Result>> ps_sets_;
-    std::vector<std::shared_ptr<Result>> po_sets_;
 
     void LoadDBInfo() {
         MMap<uint> vm = MMap<uint>(db_index_path_ + "DB_INFO", 6 * 4);
@@ -55,23 +43,27 @@ class IndexRetriever {
         po_predicate_map_file_size_ = vm[3];
         ps_predicate_map_file_size_ = vm[4];
         entity_index_arrays_file_size_ = vm[5];
-        // triplet_cnt_ = vm[6];
-        // entity_cnt_ = vm[7];
-        // predicate_cnt_ = vm[8];
-        // entity_size_ = vm[9];
-
-        // std::cout << _btree_pos_file_size << std::endl;
-        // std::cout << _btrees_file_size << std::endl;
-        // std::cout << _predicate_array_pos_file_size << std::endl;
-        // std::cout << _so_predicate_array_file_size << std::endl;
-        // std::cout << _os_predicate_array_file_size << std::endl;
-        // std::cout << _array_file_size << std::endl;
-        // std::cout << triplet_cnt_ << std::endl;
-        // std::cout << entity_cnt_ << std::endl;
-        // std::cout << predicate_cnt_ << std::endl;
 
         vm.CloseMap();
     }
+
+    void InitMMap() {
+        predicate_index_ = MMap<uint>(db_index_path_ + "PREDICATE_INDEX", predicate_index_file_size_);
+        predicate_index_arrays_ =
+            MMap<uint>(db_index_path_ + "PREDICATE_INDEX_ARRAYS", predicate_index_arrays_file_size_);
+        entity_index_ = MMap<uint>(db_index_path_ + "ENTITY_INDEX", entity_index_file_size_);
+        po_predicate_map_ = MMap<uint>(db_index_path_ + "PO_PREDICATE_MAP", po_predicate_map_file_size_);
+        ps_predicate_map_ = MMap<uint>(db_index_path_ + "PS_PREDICATE_MAP", ps_predicate_map_file_size_);
+        entity_index_arrays_ =
+            MMap<uint>(db_index_path_ + "ENTITY_INDEX_ARRAYS", entity_index_arrays_file_size_);
+    }
+
+    Dictionary dict_;
+
+    // IndexMap maps_;
+
+    std::vector<std::shared_ptr<Result>> ps_sets_;
+    std::vector<std::shared_ptr<Result>> po_sets_;
 
     bool PreLoadTree() {
         uint s_array_offset;
@@ -79,11 +71,11 @@ class IndexRetriever {
         uint o_array_offset;
         uint o_array_size;
 
-        for (uint pid = 1; pid <= dict.predicate_cnt(); pid++) {
+        for (uint pid = 1; pid <= dict_.predicate_cnt(); pid++) {
             s_array_offset = predicate_index_[(pid - 1) * 2];
             o_array_offset = predicate_index_[(pid - 1) * 2 + 1];
             s_array_size = o_array_offset - s_array_offset;
-            if (pid != dict.predicate_cnt())
+            if (pid != dict_.predicate_cnt())
                 o_array_size = predicate_index_[pid * 2] - o_array_offset;
             else
                 o_array_size = predicate_index_arrays_file_size_ / 4 - o_array_offset;
@@ -104,18 +96,24 @@ class IndexRetriever {
     }
 
    public:
+    uint retrive_cnt = 0;
+    uint empty_cnt = 0;
+    double empty_time = 0;
+
     IndexRetriever() {}
 
     IndexRetriever(std::string db_name) : db_name_(db_name) {
         auto beg = std::chrono::high_resolution_clock::now();
 
-        db_index_path_ = "./DB_DATA_ARCHIVE/" + db_name_ + "/index/";
         db_dictionary_path_ = "./DB_DATA_ARCHIVE/" + db_name_ + "/dictionary/";
+        db_index_path_ = "./DB_DATA_ARCHIVE/" + db_name_ + "/index/";
 
         LoadDBInfo();
         InitMMap();
-        dict = Dictionary(db_dictionary_path_);
-        std::thread t([&]() { dict.Load(); });
+
+        dict_ = Dictionary(db_dictionary_path_);
+        std::thread t([&]() { dict_.Load(); });
+
         PreLoadTree();
         t.join();
 
@@ -126,17 +124,6 @@ class IndexRetriever {
         std::cout << "load database success. takes " << diff.count() << " ms." << std::endl;
     }
 
-    void InitMMap() {
-        predicate_index_ = MMap<uint>(db_index_path_ + "PREDICATE_INDEX", predicate_index_file_size_);
-        predicate_index_arrays_ =
-            MMap<uint>(db_index_path_ + "PREDICATE_INDEX_ARRAYS", predicate_index_arrays_file_size_);
-        entity_index_ = MMap<uint>(db_index_path_ + "ENTITY_INDEX", entity_index_file_size_);
-        po_predicate_map_ = MMap<uint>(db_index_path_ + "PO_PREDICATE_MAP", po_predicate_map_file_size_);
-        ps_predicate_map_ = MMap<uint>(db_index_path_ + "PS_PREDICATE_MAP", ps_predicate_map_file_size_);
-        entity_index_arrays_ =
-            MMap<uint>(db_index_path_ + "ENTITY_INDEX_ARRAYS", entity_index_arrays_file_size_);
-    }
-
     void close() {
         predicate_index_.CloseMap();
         predicate_index_arrays_.CloseMap();
@@ -144,25 +131,15 @@ class IndexRetriever {
         po_predicate_map_.CloseMap();
         ps_predicate_map_.CloseMap();
         entity_index_arrays_.CloseMap();
-
-        // std::vector<std::future<void>> sub_task_list;
-        // sub_task_list.emplace_back(std::async(std::launch::async, [&]() {
-        //     std::vector<std::string>().swap(id2predicate);
-        //     hash_map<std::string, uint>().swap(predicate2id);
-        // }));
-        // for (std::future<void>& task : sub_task_list) {
-        //     task.get();
-        // }
-        // malloc_trim(0);
     }
 
-    std::string& ID2String(uint id, Pos pos) { return dict.ID2String(id, pos); }
+    std::string& ID2String(uint id, Pos pos) { return dict_.ID2String(id, pos); }
 
-    uint String2ID(const std::string& str, Pos pos) { return dict.String2ID(str, pos); }
+    uint String2ID(const std::string& str, Pos pos) { return dict_.String2ID(str, pos); }
 
-    uint triplet_cnt() { return dict.triplet_cnt(); }
+    uint triplet_cnt() { return dict_.triplet_cnt(); }
 
-    uint predicate_cnt() { return dict.predicate_cnt(); }
+    uint predicate_cnt() { return dict_.predicate_cnt(); }
 
     std::shared_ptr<Result> GetSSet(uint pid) {
         // uint s_array_offset = predicate_index_[(pid - 1) * 4];
@@ -193,7 +170,7 @@ class IndexRetriever {
 
     uint GetOSetSize(uint pid) {
         uint o_array_offset = predicate_index_[(pid - 1) * 4 + 2];
-        if (pid != dict.predicate_cnt())
+        if (pid != dict_.predicate_cnt())
             return predicate_index_[pid * 4] - o_array_offset;
         else
             return predicate_index_arrays_file_size_ / 4 - o_array_offset;
@@ -203,27 +180,38 @@ class IndexRetriever {
 
     uint POSize(uint pid) { return predicate_index_[(pid - 1) * 4 + 3]; }
 
-    std::shared_ptr<Result> GetByPS(uint p, uint s) {
-        // sleep(1);
-        // std::cout << "p: " << p << " " << "s: " << s;
-        uint offset = entity_index_[(s - 1) * 2];
+    std::pair<uint, uint> GetPrediacateSet(uint e, Order order) {
+        uint offset;
         uint size;
-        //  dict.max_id() - 1
-        if (s != dict.max_id()) {
-            size = (entity_index_[s * 2] - offset) / 3;
-        } else {
-            size = (ps_predicate_map_file_size_ / 4 - offset) / 3;
+        if (order == Order::kSPO) {
+            offset = entity_index_[(e - 1) * 2];
+            return {offset, (entity_index_[e * 2] - offset) / 3};
         }
+
+        offset = entity_index_[(e - 1) * 2 + 1];
+        if (e != dict_.max_id()) {
+            size = (entity_index_[e * 2 + 1] - offset) / 3;
+        } else {
+            size = (entity_index_file_size_ / 4 - offset) / 3;
+        }
+
+        return {offset, size};
+    }
+
+    std::shared_ptr<Result> GetByPS(uint p, uint s) {
+        if (s > dict_.shared_cnt() + dict_.subject_cnt())
+            return std::make_shared<Result>();
+
+        std::pair<uint, uint> predicate_set = GetPrediacateSet(s, Order::kSPO);
 
         uint array_offset;
         uint array_size;
 
         uint pos = 0;
-        for (; pos < size; pos++) {
-            if (po_predicate_map_[offset + 3 * pos] == p) {
-                array_offset = po_predicate_map_[offset + 3 * pos + 1];
-                array_size = po_predicate_map_[offset + 3 * pos + 2];
-                // std::cout << " size: " << array_size << std::endl;
+        for (; pos < predicate_set.second; pos++) {
+            if (po_predicate_map_[predicate_set.first + 3 * pos] == p) {
+                array_offset = po_predicate_map_[predicate_set.first + 3 * pos + 1];
+                array_size = po_predicate_map_[predicate_set.first + 3 * pos + 2];
                 if (array_size != 1)
                     return std::make_shared<Result>(&entity_index_arrays_[array_offset], array_size);
                 else {
@@ -233,47 +221,34 @@ class IndexRetriever {
                 }
             }
         }
-        // std::cout << " size: " << 0 << std::endl;
         return std::make_shared<Result>();
     }
 
     uint GetByPSSize(uint p, uint s) {
-        uint offset = entity_index_[(s - 1) * 2];
-        uint size;
-        if (s != dict.max_id()) {
-            size = (entity_index_[s * 2] - offset) / 3;
-        } else {
-            size = (po_predicate_map_file_size_ / 4 - offset) / 3;
-        }
+        std::pair<uint, uint> predicate_set = GetPrediacateSet(s, Order::kSPO);
 
-        for (uint i = 0; i < size; i++) {
-            if (po_predicate_map_[offset + 3 * i] == p) {
-                return po_predicate_map_[offset + 3 * i + 2];
+        for (uint i = 0; i < predicate_set.second; i++) {
+            if (po_predicate_map_[predicate_set.first + 3 * i] == p) {
+                return po_predicate_map_[predicate_set.first + 3 * i + 2];
             }
         }
         return UINT_MAX;
     }
 
     std::shared_ptr<Result> GetByPO(uint p, uint o) {
-        // sleep(1);
-        // std::cout << "p: " << p << " " << "o: " << o;
-        uint offset = entity_index_[(o - 1) * 2 + 1];
-        uint size;
-        if (o != dict.max_id()) {
-            size = (entity_index_[o * 2 + 1] - offset) / 3;
-        } else {
-            size = (entity_index_file_size_ / 4 - offset) / 3;
-        }
+        if (dict_.shared_cnt() < o && o <= dict_.shared_cnt() + dict_.subject_cnt())
+            return std::make_shared<Result>();
+
+        std::pair<uint, uint> predicate_set = GetPrediacateSet(o, Order::kOPS);
 
         uint array_offset;
         uint array_size;
 
         uint pos = 0;
-        for (; pos < size; pos++) {
-            if (ps_predicate_map_[offset + 3 * pos] == p) {
-                array_offset = ps_predicate_map_[offset + 3 * pos + 1];
-                array_size = ps_predicate_map_[offset + 3 * pos + 2];
-                // std::cout << " size: " << array_size << std::endl;
+        for (; pos < predicate_set.second; pos++) {
+            if (ps_predicate_map_[predicate_set.first + 3 * pos] == p) {
+                array_offset = ps_predicate_map_[predicate_set.first + 3 * pos + 1];
+                array_size = ps_predicate_map_[predicate_set.first + 3 * pos + 2];
                 if (array_size != 1) {
                     return std::make_shared<Result>(&entity_index_arrays_[array_offset], array_size);
                 } else {
@@ -283,22 +258,15 @@ class IndexRetriever {
                 }
             }
         }
-        // std::cout << " size: " << 0 << std::endl;
         return std::make_shared<Result>();
     }
 
     uint GetByPOSize(uint p, uint o) {
-        uint offset = entity_index_[(o - 1) * 2 + 1];
-        uint size;
-        if (o != dict.max_id()) {
-            size = (entity_index_[o * 2 + 1] - offset) / 3;
-        } else {
-            size = (entity_index_file_size_ / 4 - offset) / 3;
-        }
+        std::pair<uint, uint> predicate_set = GetPrediacateSet(o, Order::kOPS);
 
-        for (uint i = 0; i < size; i++) {
-            if (ps_predicate_map_[offset + 3 * i] == p) {
-                return ps_predicate_map_[offset + 3 * i + 2];
+        for (uint i = 0; i < predicate_set.second; i++) {
+            if (ps_predicate_map_[predicate_set.first + 3 * i] == p) {
+                return ps_predicate_map_[predicate_set.first + 3 * i + 2];
             }
         }
         return UINT_MAX;

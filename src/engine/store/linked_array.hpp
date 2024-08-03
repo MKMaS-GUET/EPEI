@@ -3,8 +3,6 @@
 
 #include <vector>
 
-#define MAX_SIZE 20000
-
 template <typename T>
 class Node {
    public:
@@ -18,7 +16,12 @@ class Node {
 
 template <typename T>
 class LinkedArray : public Node<T> {
+    uint max_size_ = 1000;
+
    public:
+    LinkedArray() {}
+    LinkedArray(uint max_size) : max_size_(max_size) {}
+
     void Add(Node<T>* target_node, T e) {
         if (target_node->elements_.size() == 0) {
             target_node->elements_.push_back(e);
@@ -55,8 +58,8 @@ class LinkedArray : public Node<T> {
             if (current_node->elements_.back() >= e) {
                 Add(current_node, e);
                 // size++;
-                if (current_node->elements_.size() == MAX_SIZE) {
-                    Node<T>* new_node = new Node<T>(MAX_SIZE / 2);
+                if (current_node->elements_.size() == max_size_) {
+                    Node<T>* new_node = new Node<T>(max_size_ / 2);
                     new_node->next_ = current_node->next_;
                     current_node->next_ = new_node;
                     MoveHalf(current_node, new_node);
@@ -72,8 +75,8 @@ class LinkedArray : public Node<T> {
 
         current_node->elements_.push_back(e);
         // size++;
-        if (current_node->elements_.size() == MAX_SIZE) {
-            Node<T>* new_node = new Node<T>(MAX_SIZE / 2);
+        if (current_node->elements_.size() == max_size_) {
+            Node<T>* new_node = new Node<T>(max_size_ / 2);
             new_node->next_ = current_node->next_;
             current_node->next_ = new_node;
             MoveHalf(current_node, new_node);

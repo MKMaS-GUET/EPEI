@@ -7,9 +7,9 @@
 #include <string>
 #include <vector>
 
-#include "result.hpp"
 #include "../store/index_retriever.hpp"
 #include "leapfrog_join.hpp"
+#include "result.hpp"
 
 using Result = ResultList::Result;
 
@@ -27,8 +27,6 @@ class QueryPlan {
                                        // `curr_search_type_`
         size_t candidate_result_idx_;  // the next value location index
         // 一对迭代器，第一个是起始位置，第二个是结束位置
-        // std::pair<Entity_Tree_Iterator, Entity_Tree_Iterator>
-        //     search_range;  // the range of current search
         std::shared_ptr<Result> search_result_;
 
         Item() = default;
@@ -130,7 +128,7 @@ class QueryPlan {
 
             if (s[0] == '?' && o[0] == '?') {
                 vertex1 = s;
-                edge = index->String2ID(p, Pos::PREDICATE);
+                edge = index->String2ID(p, Pos::kPredicate);
                 vertex2 = o;
                 // only support ?v predicate ?v
                 size = index->GetSSetSize(edge);
@@ -143,25 +141,25 @@ class QueryPlan {
                 }
             } else if (s[0] == '?' && p[0] == '?') {
                 vertex1 = s;
-                edge = index->String2ID(o, Pos::OBJECT);
+                edge = index->String2ID(o, Pos::kObject);
                 vertex2 = p;
             } else if (p[0] == '?' && o[0] == '?') {
                 vertex1 = p;
-                edge = index->String2ID(s, Pos::SUBJECT);
+                edge = index->String2ID(s, Pos::kSubject);
                 vertex2 = o;
             } else {
                 if (s[0] == '?') {
                     univariates[s] += 1;
-                    size = index->GetByPOSize(index->String2ID(p, Pos::PREDICATE),
-                                              index->String2ID(o, Pos::OBJECT));
+                    size = index->GetByPOSize(index->String2ID(p, Pos::kPredicate),
+                                              index->String2ID(o, Pos::kObject));
                     if (est_size[s] == 0 || est_size[s] > size) {
                         est_size[s] = size;
                     }
                 }
                 if (o[0] == '?') {
                     univariates[o] += 1;
-                    size = index->GetByPOSize(index->String2ID(p, Pos::PREDICATE),
-                                              index->String2ID(o, Pos::OBJECT));
+                    size = index->GetByPOSize(index->String2ID(p, Pos::kPredicate),
+                                              index->String2ID(o, Pos::kObject));
                     if (est_size[s] == 0 || est_size[s] > size) {
                         est_size[s] = size;
                     }
@@ -389,8 +387,8 @@ class QueryPlan {
             uint64_t var_sid = variable_metadata_[s].first;
             uint64_t var_oid = variable_metadata_[o].first;
             if (s[0] == '?' && o[0] == '?') {
-                variable_metadata_[s].second = Pos::SUBJECT;
-                variable_metadata_[o].second = Pos::OBJECT;
+                variable_metadata_[s].second = Pos::kSubject;
+                variable_metadata_[o].second = Pos::kObject;
 
                 Item item, candidate_result_item;
 
@@ -398,7 +396,7 @@ class QueryPlan {
                 if (var_sid < var_oid) {
                     // 先在 ps 索引树上根据已知的 p 查找所有的 s
                     item.search_type_ = Item::TypeT::kPO;
-                    item.search_code_ = index->String2ID(p, Pos::PREDICATE);
+                    item.search_code_ = index->String2ID(p, Pos::kPredicate);
                     // 下一步应该查询的变量的索引
                     item.candidate_result_idx_ = var_oid;
                     item.search_result_ = index->GetSSet(item.search_code_);
@@ -419,7 +417,7 @@ class QueryPlan {
                     // none item 的索引
                     none_type_indices_[var_oid].push_back(query_plan_[var_oid].size() - 1);
                 } else {
-                    item.search_code_ = index->String2ID(p, Pos::PREDICATE);
+                    item.search_code_ = index->String2ID(p, Pos::kPredicate);
                     item.search_type_ = Item::TypeT::kPS;
                     item.candidate_result_idx_ = var_sid;
                     item.search_result_ = index->GetOSet(item.search_code_);
@@ -439,9 +437,9 @@ class QueryPlan {
             }
             // handle the situation of (?s p o)
             else if (s[0] == '?') {
-                variable_metadata_[s].second = Pos::SUBJECT;
-                uint oid = index->String2ID(o, Pos::OBJECT);
-                uint pid = index->String2ID(p, Pos::PREDICATE);
+                variable_metadata_[s].second = Pos::kSubject;
+                uint oid = index->String2ID(o, Pos::kObject);
+                uint pid = index->String2ID(p, Pos::kPredicate);
                 std::shared_ptr<Result> r = index->GetByPO(pid, oid);
                 r->id = range_cnt;
                 prestore_result_[var_sid].push_back(r);
@@ -449,9 +447,9 @@ class QueryPlan {
             }
             // handle the situation of (s p ?o)
             else if (o[0] == '?') {
-                variable_metadata_[o].second = Pos::OBJECT;
-                uint sid = index->String2ID(s, Pos::SUBJECT);
-                uint pid = index->String2ID(p, Pos::PREDICATE);
+                variable_metadata_[o].second = Pos::kObject;
+                uint sid = index->String2ID(s, Pos::kSubject);
+                uint pid = index->String2ID(p, Pos::kPredicate);
                 std::shared_ptr<Result> r = index->GetByPS(pid, sid);
                 r->id = range_cnt;
                 prestore_result_[var_oid].push_back(r);

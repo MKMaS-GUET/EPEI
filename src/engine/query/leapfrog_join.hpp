@@ -13,6 +13,10 @@
 #include <algorithm>
 #include <vector>
 
+// uint join_cnt = 0;
+// uint empty_join_cnt = 0;
+// double empty_time = 0;
+
 void LeapfrogJoin(ResultList& pair_begin_end, std::vector<uint>& result_set) {
     uint value;
 

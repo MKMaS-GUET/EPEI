@@ -12,8 +12,8 @@
 template <typename Key, typename Value>
 using hash_map = phmap::flat_hash_map<Key, Value>;
 
-enum Pos { SUBJECT, PREDICATE, OBJECT, SHARED };
-enum Map { SUBJECT_MAP, PREDICATE_MAP, OBJECT_MAP, SHARED_MAP };
+enum Pos { kSubject, kPredicate, kObject, kShared };
+enum Map { kSubjectMap, kPredicateMap, kObjectMap, kSharedMap };
 
 class Dictionary {
     std::string dict_path_;
@@ -280,7 +280,7 @@ class Dictionary {
 
     uint Find(Map map, const std::string& str) {
         hash_map<std::string, uint>::iterator it;
-        if (map == Map::PREDICATE_MAP) {
+        if (map == Map::kPredicateMap) {
             it = predicate2id_.find(str);
             if (it != predicate2id_.end())
                 return it->second;
@@ -289,17 +289,17 @@ class Dictionary {
         }
 
         for (uint part = 0; part < 6; part++) {
-            if (map == Map::SUBJECT_MAP) {
+            if (map == Map::kSubjectMap) {
                 it = subject2id_[part].find(str);
                 if (it != subject2id_[part].end())
                     return it->second;
             }
-            if (map == Map::OBJECT_MAP) {
+            if (map == Map::kObjectMap) {
                 it = object2id_[part].find(str);
                 if (it != object2id_[part].end())
                     return it->second;
             }
-            if (map == Map::SHARED_MAP) {
+            if (map == Map::kSharedMap) {
                 it = shared2id_[part].find(str);
                 if (it != shared2id_[part].end())
                     return it->second;
@@ -334,9 +334,9 @@ class Dictionary {
 
     uint String2IDAfterBuild(const std::string& str, Pos pos) {
         switch (pos) {
-            case Pos::SUBJECT:  // subject
+            case Pos::kSubject:  // subject
                 return shared_cnt_ + FindInMaps(subjects_, str);
-            case Pos::PREDICATE: {
+            case Pos::kPredicate: {
                 // predicate
                 auto it = predicates_.find(str);
                 if (it != predicates_.end()) {
@@ -344,7 +344,7 @@ class Dictionary {
                 }
                 return 0;
             }
-            case Pos::OBJECT:  // object
+            case Pos::kObject:  // object
                 return shared_cnt_ + subject_cnt_ + FindInMaps(objects_, str);
             default:
                 break;
@@ -355,7 +355,7 @@ class Dictionary {
     uint FindInMaps(uint cnt, Map map, const std::string& str) {
         uint ret;
         if (shared_cnt_ > cnt) {
-            ret = Find(SHARED_MAP, str);
+            ret = Find(kSharedMap, str);
             if (ret)
                 return ret;
             ret = Find(map, str);
@@ -365,7 +365,7 @@ class Dictionary {
             ret = Find(map, str);
             if (ret)
                 return ret;
-            ret = Find(SHARED_MAP, str);
+            ret = Find(kSharedMap, str);
             if (ret)
                 return ret;
         }
@@ -374,13 +374,13 @@ class Dictionary {
 
     uint String2IDAfterLoad(const std::string& str, Pos pos) {
         switch (pos) {
-            case SUBJECT:  // subject
-                return shared_cnt_ + FindInMaps(subject_cnt_, SUBJECT_MAP, str);
-            case PREDICATE: {  // predicate
-                return Find(PREDICATE_MAP, str);
+            case kSubject:  // subject
+                return shared_cnt_ + FindInMaps(subject_cnt_, kSubjectMap, str);
+            case kPredicate: {  // predicate
+                return Find(kPredicateMap, str);
             }
-            case OBJECT:  // object
-                return shared_cnt_ + subject_cnt_ + FindInMaps(object_cnt_, OBJECT_MAP, str);
+            case kObject:  // object
+                return shared_cnt_ + subject_cnt_ + FindInMaps(object_cnt_, kObjectMap, str);
             default:
                 break;
         }
@@ -392,17 +392,17 @@ class Dictionary {
         std::vector<std::string>* vec = nullptr;
         std::string path = dict_path_;
 
-        if (pos == Pos::SUBJECT) {
+        if (pos == Pos::kSubject) {
             map = &subject2id_[part];
             vec = &id2subject_;
             path += "/subjects/";
         }
-        if (pos == Pos::OBJECT) {
+        if (pos == Pos::kObject) {
             map = &object2id_[part];
             vec = &id2object_;
             path += "/objects/";
         }
-        if (pos == Pos::SHARED) {
+        if (pos == Pos::kShared) {
             map = &shared2id_[part];
             vec = &id2shared_;
             path += "/shared/";
@@ -492,7 +492,7 @@ class Dictionary {
 
         for (int t = 0; t < 6; t++) {
             sub_task_list.emplace_back(
-                std::async(std::launch::async, &Dictionary::SubLoadDict, this, Pos::SUBJECT, t));
+                std::async(std::launch::async, &Dictionary::SubLoadDict, this, Pos::kSubject, t));
         }
         for (std::future<bool>& task : sub_task_list) {
             task.get();
@@ -500,7 +500,7 @@ class Dictionary {
         sub_task_list.clear();
         for (int t = 0; t < 6; t++) {
             sub_task_list.emplace_back(
-                std::async(std::launch::async, &Dictionary::SubLoadDict, this, Pos::OBJECT, t));
+                std::async(std::launch::async, &Dictionary::SubLoadDict, this, Pos::kObject, t));
         }
         for (std::future<bool>& task : sub_task_list) {
             task.get();
@@ -508,7 +508,7 @@ class Dictionary {
         sub_task_list.clear();
         for (int t = 0; t < 6; t++) {
             sub_task_list.emplace_back(
-                std::async(std::launch::async, &Dictionary::SubLoadDict, this, Pos::SHARED, t));
+                std::async(std::launch::async, &Dictionary::SubLoadDict, this, Pos::kShared, t));
         }
         for (std::future<bool>& task : sub_task_list) {
             task.get();
@@ -519,7 +519,7 @@ class Dictionary {
     }
 
     std::string& ID2String(uint id, Pos pos) {
-        if (pos == PREDICATE) {
+        if (pos == kPredicate) {
             return id2predicate_[id];
         }
 
@@ -528,10 +528,10 @@ class Dictionary {
         }
 
         switch (pos) {
-            case SUBJECT:
+            case kSubject:
                 return id2subject_[id - shared_cnt_];
-            case OBJECT:
-                return id2object_[id - shared_cnt_];
+            case kObject:
+                return id2object_[id - shared_cnt_ - subject_cnt_];
             default:
                 break;
         }
@@ -558,11 +558,11 @@ class Dictionary {
             std::getline(fin, o);
             for (o.pop_back(); o.back() == ' ' || o.back() == '.'; o.pop_back()) {
             }
-            map[offset] = String2IDAfterBuild(s, Pos::SUBJECT);
+            map[offset] = String2IDAfterBuild(s, Pos::kSubject);
             offset++;
-            map[offset] = String2IDAfterBuild(p, Pos::PREDICATE);
+            map[offset] = String2IDAfterBuild(p, Pos::kPredicate);
             offset++;
-            map[offset] = String2IDAfterBuild(o, Pos::OBJECT);
+            map[offset] = String2IDAfterBuild(o, Pos::kObject);
             offset++;
 
             ++cnt;

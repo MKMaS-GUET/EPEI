@@ -1,10 +1,10 @@
 #ifndef RESULT_LIST_HPP
 #define RESULT_LIST_HPP
 
-#include <unistd.h>
 #include <iterator>
 #include <string>
 #include <vector>
+#include <memory>
 
 
 class ResultList {

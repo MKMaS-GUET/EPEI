@@ -2,6 +2,7 @@
 #define MMAP_HPP
 
 #include <fcntl.h>
+#include <parallel_hashmap/phmap.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <string>

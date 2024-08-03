@@ -40,8 +40,8 @@ class epei::Engine::Impl {
     }
 
     void ExecuteSparql(std::vector<std::string> sparqls,
-                        std::shared_ptr<IndexRetriever> index,
-                        std::string file_name) {
+                       std::shared_ptr<IndexRetriever> index,
+                       std::string file_name) {
         std::ofstream output_file;
         std::ios::sync_with_stdio(false);
         if (file_name != "")
@@ -128,111 +128,6 @@ class epei::Engine::Impl {
             ExecuteSparql(sparqls, index, "");
             exit(0);
         }
-        //  else {
-        //     std::string db_help = "select [database name]";
-        //     std::string query_help =
-        //         "Usage: sparql [options]\n"
-        //         "\n"
-        //         "Description:\n"
-        //         "  Run a SPARQL query.\n"
-        //         "\n\n"
-        //         "Usage: file [options] [arguments]\n"
-        //         "\n"
-        //         "Description:\n"
-        //         "  Run SPARQL queries from a file and output the results to a file.\n"
-        //         "\n"
-        //         "Options:\n"
-        //         "  -i, --input <file>    Specify the input file containing SPARQL queries.\n"
-        //         "  -o, --output [file]   Specify the output file for the query results.\n";
-
-        //     std::string cmd;
-        //     std::string db;
-        //     std::shared_ptr<Index> index;
-        //     ListDB();
-        //     while (true) {
-        //         std::cout << ">";
-
-        //         std::cin >> cmd;
-        //         if (cmd == "select") {
-        //             std::cin >> db;
-        //             index = std::make_shared<Index>(db);
-        //             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-        //             while (true) {
-        //                 std::cout << ">";
-        //                 std::string sparql;
-        //                 std::string line;
-        //                 std::string word;
-        //                 std::getline(std::cin, line);
-        //                 std::istringstream iss(line);
-        //                 bool cmd_flag = true;
-        //                 while (iss >> word) {
-        //                     if (cmd_flag) {
-        //                         cmd = word;
-        //                         cmd_flag = false;
-        //                     } else {
-        //                         sparql += word + " ";
-        //                     }
-        //                 }
-
-        //                 if (sparql.size() > 1)
-        //                     sparql = sparql.substr(0, sparql.size() - 1);
-
-        //                 std::vector<std::string> sparqls;
-        //                 if (cmd == "sparql") {
-        //                     sparqls.push_back(sparql);
-        //                     ExecuteSparql(sparqls, index, "");
-        //                 } else if (cmd == "file") {
-        //                     std::string rest_cmd = sparql;
-        //                     std::istringstream iss(sparql);
-        //                     std::string token;
-
-        //                     std::string input_file, output_file = "";
-        //                     while (iss >> token) {
-        //                         if (token == "-i" || token == "--input") {
-        //                             iss >> input_file;
-        //                         } else if (token == "-o" || token == "--output") {
-        //                             iss >> output_file;
-        //                         }
-        //                     }
-
-        //                     if (input_file != "") {
-        //                         std::ifstream in(input_file, std::ifstream::in);
-        //                         if (in.is_open()) {
-        //                             std::string line;
-        //                             while (std::getline(in, sparql)) {
-        //                                 sparqls.push_back(sparql);
-        //                             }
-        //                             in.close();
-        //                         }
-        //                         ExecuteSparql(sparqls, index, output_file);
-        //                     }
-        //                 } else if (cmd == "help") {
-        //                     std::cout << query_help << std::endl;
-        //                 } else if (cmd == "change") {
-        //                     index->close();
-        //                     list_db();
-        //                     break;
-        //                 } else if (cmd == "exit") {
-        //                     exit(0);
-        //                 } else {
-        //                     std::cout << query_help << std::endl;
-        //                 }
-
-        //                 // sleep(1);
-        //             }
-
-        //         } else if (cmd == "help") {
-        //             std::cout << db_help << std::endl;
-        //         } else if (cmd == "exit") {
-        //             exit(0);
-        //         } else {
-        //             list_db();
-        //         }
-        //     }
-        // }
-
-        // parse SPARQL statement
     }
 
     void Server(const std::string& ip, const std::string& port) { start_server(ip, port); }
@@ -257,32 +152,6 @@ class epei::Engine::Impl {
         std::cout << "\nExample:" << std::endl;
         std::cout << "  select database_name\n" << std::endl;
     }
-
-    // void get_entity(phmap::flat_hash_set<std::string>& entities, std::string sparql) {
-    //     std::regex pattern(R"(\{([^{}]*)\})");
-    //     std::regex triplet_Pattern(
-    //         R"(((\?.*?\s+)|(<.*?>)\s+)((\?.*?\s+)|(<.*?>)\s+)((\?.*?\s+)|(<.*?>)\s+)\.)");
-    //     std::smatch match;
-    //     if (std::regex_search(sparql, match, pattern)) {
-    //         std::string triplets_str = match[1].str();
-    //         std::sregex_iterator triplet_iter(triplets_str.begin(), triplets_str.end(), triplet_Pattern);
-    //         std::sregex_iterator end;
-    //         while (triplet_iter != end) {
-    //             std::smatch triplet = *triplet_iter;
-    //             std::istringstream iss(triplet[0]);
-    //             std::string part1, part2, part3;
-    //             iss >> part1 >> part2 >> part3;
-    //             if (part1[0] == '<' && part1.back() == '>') {
-    //                 entities.insert(part1);
-    //             }
-    //             if (part3[0] == '<' && part3.back() == '>') {
-    //                 entities.insert(part3);
-    //             }
-    //             ++triplet_iter;
-    //         }
-    //     }
-    //     return;
-    // }
 };
 
 #endif  // ENGINE_IMPL_HPP

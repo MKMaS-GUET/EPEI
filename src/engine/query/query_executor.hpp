@@ -262,9 +262,9 @@ class QueryExecutor {
         }
         if (join_case == 1) {
             // for (const auto& idx : item_other_type_indices_) {
-            //     result_list.add_vector(stat.plan_[stat.level_][idx].search_result);
+            //     result_list.AddVector(stat.plan_[stat.level_][idx].search_result_);
             // }
-            // stat.candidate_result_[stat.level_] = leapfrog_join(result_Vector_list);
+            // stat.candidate_result_[stat.level_] = LeapfrogJoin(result_list);
             std::shared_ptr<Result> range = result_list.GetRangeByIndex(0);
             stat.candidate_result_[stat.level_] = std::make_shared<std::vector<uint>>();
             for (uint i = 0; i < range->size(); i++) {
