@@ -15,8 +15,8 @@
 #include "../query/query_executor.hpp"
 #include "../query/query_plan.hpp"
 #include "../query/query_result.hpp"
-#include "../store/index_builder.hpp"
 #include "../store/index.hpp"
+#include "../store/index_builder.hpp"
 
 std::string db_name;
 std::shared_ptr<IndexRetriever> db_index;
@@ -39,45 +39,44 @@ std::vector<std::string> list_db() {
     return rdf_db_list;
 }
 
-std::string execute_query(std::string& sparql, nlohmann::json& res) {
+void execute_query(std::string& sparql, nlohmann::json& res) {
     if (db_index == 0) {
         std::cout << "database doesn't be loaded correctly." << std::endl;
-        return {};
     }
+
     auto start = std::chrono::high_resolution_clock::now();
 
     auto parser = std::make_shared<SPARQLParser>(sparql);
-
-    // generate query plan
     auto query_plan = std::make_shared<QueryPlan>(db_index, parser->TripleList(), parser->Limit());
 
-    // execute query
     auto executor = std::make_shared<QueryExecutor>(db_index, query_plan);
-
     executor->Query();
 
-    std::vector<std::vector<uint>> results_id = executor->query_result();
+    std::vector<std::string> variables = parser->ProjectVariables();
+    const auto variable_indexes = query_plan->MappingVariable(variables);
 
-    auto variables = parser->ProjectVariables();
+    res["head"]["vars"] = variables;
+    std::vector<std::vector<uint>>& results_id = executor->query_result();
 
-    auto finish = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> diff = finish - start;
-
-    std::string results = "0 result";
+    std::chrono::duration<double, std::milli> diff;
+    std::chrono::high_resolution_clock::time_point finish;
 
     uint cnt = 0;
-    if (results_id.size() != 0) {
-        cnt = query_result(results_id, results, db_index, query_plan, parser);
+    if (results_id.size() == 0) {
+        finish = std::chrono::high_resolution_clock::now();
+        res["results"]["bindings"] = std::vector<uint>();
+    } else {
+        std::vector<std::vector<std::string>> results_str(results_id.size(),
+                                                          std::vector<std::string>(variables.size()));
+        cnt = query_result(results_id, results_str, db_index, variable_indexes, parser);
+        finish = std::chrono::high_resolution_clock::now();
+        res["results"]["bindings"] = results_str;
     }
 
-    res["results"] = results;
-    res["cnt"] = std::to_string(cnt);
+    diff = finish - start;
+    res["time"] = diff.count();
 
-    double time = diff.count();
-    int integer_part = static_cast<int>(time);
-    int decimal_part = static_cast<int>((time - integer_part) * 100);
-    res["time"] = std::to_string(integer_part).append(".").append(std::to_string(decimal_part));
-    return results;
+    std::cout << cnt << " result(s)" << std::endl;
 }
 
 void list(const httplib::Request& req, httplib::Response& res) {
@@ -103,19 +102,16 @@ void info(const httplib::Request& req, httplib::Response& res) {
 }
 
 void query(const httplib::Request& req, httplib::Response& res) {
-    std::cout << "Catch query request from http://" << req.remote_addr << ":" << req.remote_port << std::endl;
+    // std::cout << "Catch query request from http://" << req.remote_addr << ":" << req.remote_port <<
+    // std::endl;
 
-    nlohmann::json body = nlohmann::json::parse(req.body);
-
-    if (!body.contains("sparql")) {
-        return;
-    }
-    std::string sparql = body["sparql"];
+    std::string sparql = req.get_param_value("query");
+    // std::cout << req.get_param_value("query") << std::endl;
     nlohmann::json response;
     if (db_name != "")
         execute_query(sparql, response);
 
-    res.set_content(response.dump(2), "text/plain;charset=utf-8");
+    res.set_content(response.dump(2), "application/sparql-results+json;charset=utf-8");
 }
 
 void create(const httplib::Request& req, httplib::Response& res) {
@@ -157,7 +153,6 @@ void load_db(const httplib::Request& req, httplib::Response& res) {
               << std::endl;
 
     nlohmann::json response;
-
     nlohmann::json body = nlohmann::json::parse(req.body);
 
     if (!body.contains("db_name")) {
@@ -182,8 +177,6 @@ void load_db(const httplib::Request& req, httplib::Response& res) {
         db_index->close();
 
     db_index = std::make_shared<IndexRetriever>(new_db_name);
-    phmap::flat_hash_set<std::string> entities;
-
     db_name = new_db_name;
 
     response["code"] = 1;
@@ -276,7 +269,7 @@ void upload(const httplib::Request& req, httplib::Response& res) {
     res.set_content(j.dump(2), "text/plain;charset=utf-8");
 }
 
-bool start_server(std::string ip, std::string port) {
+bool start_server(const std::string& ip, const std::string& port, const std::string& db) {
     std::cout << "Running at:" + ip + ":" << port << std::endl;
 
     httplib::Server svr;
@@ -289,24 +282,30 @@ bool start_server(std::string ip, std::string port) {
 
     svr.set_base_dir("./");
 
-    std::string base_url = "/peirs";
+    std::string base_url = "/epei";
 
-    svr.Post(base_url + "/create", create);     // create RDF
-    svr.Post(base_url + "/load_db", load_db);   // load RDF
-    svr.Get(base_url + "/close", close_db);     // close RDF
-    svr.Post(base_url + "/delete", delete_db);  // delete RDF
-    svr.Get(base_url + "/list", list);          // list RDF
-    svr.Get(base_url + "/info", info);          // show RDF information
-    svr.Post(base_url + "/upload", upload);     // upload RDF file
-    svr.Post(base_url + "/query", query);       // query on RDF
+    if (db.empty()) {
+        svr.Post(base_url + "/create", create);     // create RDF
+        svr.Post(base_url + "/load_db", load_db);   // load RDF
+        svr.Get(base_url + "/close", close_db);     // close RDF
+        svr.Post(base_url + "/delete", delete_db);  // delete RDF
+        svr.Get(base_url + "/list", list);          // list RDF
+        svr.Get(base_url + "/info", info);          // show RDF information
+        svr.Post(base_url + "/upload", upload);     // upload RDF file
+        svr.Options(base_url + "/load_db",
+                    [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
+        svr.Options(base_url + "/create",
+                    [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
+        svr.Options(base_url + "/delete",
+                    [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
+    } else {
+        db_index = std::make_shared<IndexRetriever>(db);
+        db_name = db;
+    }
 
-    svr.Options(base_url + "/load_db",
-                [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
-    svr.Options(base_url + "/create",
-                [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
-    svr.Options(base_url + "/query",
-                [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
-    svr.Options(base_url + "/delete",
+    svr.Get(base_url + "/sparql", query);   // query on RDF
+    svr.Post(base_url + "/sparql", query);  // query on RDF
+    svr.Options(base_url + "/sparql",
                 [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
 
     // disconnect

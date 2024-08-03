@@ -26,7 +26,8 @@ void Query(const std::unordered_map<std::string, std::string>& arguments) {
 void Server(const std::unordered_map<std::string, std::string>& arguments) {
     std::string ip = arguments.at("ip");
     std::string port = arguments.at("port");
-    epei::Engine::Server(ip, port);
+    std::string db = arguments.at("name");
+    epei::Engine::Server(ip, port, db);
 }
 
 struct EnumClassHash {

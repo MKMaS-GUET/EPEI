@@ -147,14 +147,15 @@ class ArgsParser {
         "  epei query --db my_database -f /path/to/query.sparql\n";
 
     const std::string serve_info_ =
-        "Usage: epei server [-p,--port PORT]\n"
+        "Usage: epei server [--ip IP] [-p,--port PORT] \n"
         "\n"
         "Description:\n"
         "  Start the HTTP server for EPEI.\n"
         "\n"
         "Options:\n"
-        "  -ip                 Specify the HTTP server ip.\n"
-        "  -p, --port <PORT>   Specify the HTTP server port.\n"
+        "  --db, --database <DATABASE>   Specify the database name.\n"
+        "  --ip                          Specify the HTTP server ip.\n"
+        "  -p,   --port     <PORT>       Specify the HTTP server port.\n"
         "\n"
         "Optional Arguments:\n"
         "  -h, --help          Show this help message and exit.\n"
@@ -211,12 +212,15 @@ class ArgsParser {
             std::cout << serve_info_ << std::endl;
             exit(1);
         }
-        if ((!args.count("-p") && !args.count("--port")) || !args.count("-ip")) {
-            std::cerr << "usage: epei server [-ip IP] [-p PORT]" << std::endl;
-            std::cerr << "epei: error: the following arguments are required: [-ip IP] [-p PORT]" << std::endl;
+        if ((!args.count("-p") && !args.count("--port")) || !args.count("--ip")) {
+            std::cerr << "usage: epei server [--ip IP] [-p PORT]" << std::endl;
+            std::cerr << "epei: error: the following arguments are required: [--ip IP] [-p PORT]"
+                      << std::endl;
             exit(1);
         }
-        arguments_[arg_ip_] = args.at("-ip");
+        if (args.count("--db"))
+            arguments_[arg_name_] = args.count("--db") ? args.at("--db") : args.at("--database");
+        arguments_[arg_ip_] = args.at("--ip");
         arguments_[arg_port_] = args.count("-p") ? args.at("-p") : args.at("--port");
         if (!IsNumber(arguments_[arg_port_])) {
             std::cerr << "epei: error: the argument [-p PORT] requires a number, but got "

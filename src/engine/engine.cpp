@@ -20,9 +20,9 @@ void Engine::Query(const std::string& db_name, const std::string& data_file) {
     impl->Query(db_name, data_file);
 }
 
-void Engine::Server(const std::string& ip, const std::string& port) {
+void Engine::Server(const std::string& ip, const std::string& port, const std::string& db) {
     auto impl = std::make_shared<Engine::Impl>();
-    impl->Server(ip, port);
+    impl->Server(ip, port, db);
 }
 
 }  // namespace epei

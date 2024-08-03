@@ -28,7 +28,7 @@ class Engine {
 
     static void Query(const std::string& db_name, const std::string& data_file);
 
-    static void Server(const std::string& ip, const std::string& port);
+    static void Server(const std::string& ip, const std::string& port, const std::string& db);
 
    public:
     std::shared_ptr<Impl> _impl;

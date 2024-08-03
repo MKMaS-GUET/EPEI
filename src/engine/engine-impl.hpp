@@ -39,39 +39,25 @@ class epei::Engine::Impl {
         std::cout << "Creating " << db_name << " takes " << diff.count() << " ms." << std::endl;
     }
 
-    void ExecuteSparql(std::vector<std::string> sparqls,
-                       std::shared_ptr<IndexRetriever> index,
-                       std::string file_name) {
+    void ExecuteSparql(std::vector<std::string> sparqls, std::shared_ptr<IndexRetriever> index) {
         std::ofstream output_file;
         std::ios::sync_with_stdio(false);
-        if (file_name != "")
-            output_file = std::ofstream(file_name);
 
         for (long unsigned int i = 0; i < sparqls.size(); i++) {
             std::string sparql = sparqls[i];
 
             if (sparqls.size() > 1) {
-                if (file_name == "") {
-                    std::cout << i + 1
-                              << " ------------------------------------------------------------------"
-                              << std::endl;
-                    std::cout << sparql << std::endl;
-                } else {
-                    output_file << (i + 1)
-                                << " ------------------------------------------------------------------"
-                                << std::endl;
-
-                    std::cout << "finish " << i + 1 << " queries" << std::endl;
-                }
+                std::cout << i + 1 << " ------------------------------------------------------------------"
+                          << std::endl;
+                std::cout << sparql << std::endl;
             }
 
             auto start = std::chrono::high_resolution_clock::now();
 
             auto parser = std::make_shared<SPARQLParser>(sparql);
-            auto triple_list = parser->TripleList();
 
             // generate query plan
-            auto query_plan = std::make_shared<QueryPlan>(index, triple_list, parser->Limit());
+            auto query_plan = std::make_shared<QueryPlan>(index, parser->TripleList(), parser->Limit());
 
             auto plan_end = std::chrono::high_resolution_clock::now();
 
@@ -82,10 +68,8 @@ class epei::Engine::Impl {
 
             auto mapping_start = std::chrono::high_resolution_clock::now();
             uint cnt = 0;
-            if (file_name == "")
-                cnt = query_result(executor->query_result(), index, query_plan, parser);
-            else
-                cnt = query_result(executor->query_result(), index, query_plan, parser, output_file);
+            cnt = query_result(executor->query_result(), index, query_plan, parser);
+
             auto mapping_finish = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> mapping_diff = mapping_finish - mapping_start;
 
@@ -94,20 +78,11 @@ class epei::Engine::Impl {
 
             std::chrono::duration<double, std::milli> plan_time = plan_end - start;
 
-            if (file_name == "") {
-                std::cout << cnt << " result(s).\n";
-                std::cout << "generate plan takes " << plan_time.count() << " ms.\n";
-                std::cout << "execute takes " << executor->Duration() << " ms.\n";
-                std::cout << "output result takes " << mapping_diff.count() << " ms.\n";
-                std::cout << "query cost " << diff.count() << " ms." << std::endl;
-            } else {
-                output_file << cnt << "  result(s).\n";
-                output_file << "generate plan takes " << plan_time.count() << " ms.\n";
-                output_file << "execute takes " << executor->Duration() << " ms.\n";
-                output_file << "output result takes " << mapping_diff.count() << " ms.\n";
-                output_file << "query cost " << diff.count() << " ms." << std::endl;
-            }
-
+            std::cout << cnt << " result(s).\n";
+            std::cout << "generate plan takes " << plan_time.count() << " ms.\n";
+            std::cout << "execute takes " << executor->Duration() << " ms.\n";
+            std::cout << "output result takes " << mapping_diff.count() << " ms.\n";
+            std::cout << "query cost " << diff.count() << " ms." << std::endl;
             // printf("%s", sparql.c_str());
         }
     }
@@ -125,12 +100,14 @@ class epei::Engine::Impl {
                 }
                 in.close();
             }
-            ExecuteSparql(sparqls, index, "");
+            ExecuteSparql(sparqls, index);
             exit(0);
         }
     }
 
-    void Server(const std::string& ip, const std::string& port) { start_server(ip, port); }
+    void Server(const std::string& ip, const std::string& port, const std::string& db) {
+        start_server(ip, port, db);
+    }
 
    private:
     void ListDB() {

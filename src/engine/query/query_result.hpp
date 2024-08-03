@@ -2,23 +2,21 @@
 #ifndef QUERY_RESULT_HPP
 #define QUERY_RESULT_HPP
 
+#include <nlohmann/json.hpp>
 #include <vector>
 #include "../parser/sparql_parser.hpp"
 #include "../store/index_retriever.hpp"
 #include "./query_plan.hpp"
 
 uint query_result(std::vector<std::vector<uint>>& results_id,
-                  std::string& results,
+                  std::vector<std::vector<std::string>>& results_str,
                   const std::shared_ptr<IndexRetriever> index,
-                  const std::shared_ptr<QueryPlan> query_plan,
+                  const std::vector<std::pair<uint, Pos>> variable_indexes,
                   const std::shared_ptr<SPARQLParser> parser) {
     auto last = results_id.end();
     const auto& modifier = parser->project_modifier();
     // 获取每一个变量的id（优先级顺序）
-    const auto variable_indexes = query_plan->MappingVariable(parser->ProjectVariables());
 
-    std::stringstream ss;
-    uint cnt = 0;
     if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {
         last = std::unique(results_id.begin(), results_id.end(),
                            [&](const std::vector<uint>& a, const std::vector<uint>& b) {
@@ -26,29 +24,20 @@ uint query_result(std::vector<std::vector<uint>>& results_id,
                                    variable_indexes.begin(), variable_indexes.end(),
                                    [&](std::pair<uint, Pos> i) { return a[i.first] == b[i.first]; });
                            });
-        for (auto it = results_id.begin(); it != last; ++it) {
-            const auto& item = *it;
-            for (const auto& idx : variable_indexes) {
-                ss << index->ID2String(item[idx.first], idx.second);
-                ss << "";
-            }
-            ss << "\n";
-            cnt++;
-        }
-    } else {
-        cnt = results_id.size();
-        for (auto it = results_id.begin(); it != last; ++it) {
-            const auto& item = *it;
-            for (const auto& idx : variable_indexes) {
-                ss << index->ID2String(item[idx.first], idx.second);
-                ss << "";
-            }
-            ss << "\n";
-        }
     }
 
-    results = ss.str();
-    return cnt;
+    uint r_id = 0;
+    for (auto it = results_id.begin(); it != last; ++it) {
+        const auto& item = *it;
+        uint i = 0;
+        for (const auto& idx : variable_indexes) {
+            results_str[r_id][i] = index->ID2String(item[idx.first], idx.second);
+            i++;
+        }
+        r_id++;
+    }
+
+    return r_id;
 }
 
 int query_result(std::vector<std::vector<uint>>& result,
@@ -73,63 +62,14 @@ int query_result(std::vector<std::vector<uint>>& result,
                                    // 判断依据是，列表中的每一个元素都相同
                                    [&](std::pair<uint, Pos> i) { return a[i.first] == b[i.first]; });
                            });
-        for (auto it = result.begin(); it != last; ++it) {
-            const auto& item = *it;
-            for (const auto& idx : variable_indexes) {
-                std::cout << item[idx.first] << std::endl;
-                std::cout << index->ID2String(item[idx.first], idx.second) << " ";
-            }
-            cnt++;
-            std::cout << "\n";
-        }
-    } else {
-        cnt = result.size();
-        for (auto it = result.begin(); it != last; ++it) {
-            const auto& item = *it;
-            for (const auto& idx : variable_indexes) {
-                std::cout << index->ID2String(item[idx.first], idx.second) << " ";
-            }
-            std::cout << "\n";
-        }
     }
-
-    return cnt;
-}
-
-int query_result(std::vector<std::vector<uint>>& result,
-                 const std::shared_ptr<IndexRetriever> index,
-                 const std::shared_ptr<QueryPlan> query_plan,
-                 const std::shared_ptr<SPARQLParser> parser,
-                 std::ofstream& output_file) {
-    auto last = result.end();
-    const auto& modifier = parser->project_modifier();
-    // 获取每一个变量的id（优先级顺序）
-    const auto variable_indexes = query_plan->MappingVariable(parser->ProjectVariables());
-
-    int cnt = 0;
-    if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {
-        last = std::unique(
-            result.begin(), result.end(), [&](const std::vector<uint>& a, const std::vector<uint>& b) {
-                return std::all_of(variable_indexes.begin(), variable_indexes.end(),
-                                   [&](std::pair<uint, Pos> i) { return a[i.first] == b[i.first]; });
-            });
-        for (auto it = result.begin(); it != last; ++it) {
-            const auto& item = *it;
-            for (const auto& idx : variable_indexes) {
-                output_file << index->ID2String(item[idx.first], idx.second) << " ";
-            }
-            cnt++;
-            output_file << "\n";
+    for (auto it = result.begin(); it != last; ++it) {
+        const auto& item = *it;
+        for (const auto& idx : variable_indexes) {
+            std::cout << index->ID2String(item[idx.first], idx.second) << " ";
         }
-    } else {
-        cnt = result.size();
-        for (auto it = result.begin(); it != last; ++it) {
-            const auto& item = *it;
-            for (const auto& idx : variable_indexes) {
-                output_file << index->ID2String(item[idx.first], idx.second) << " ";
-            }
-            output_file << "\n";
-        }
+        cnt++;
+        std::cout << "\n";
     }
 
     return cnt;
