@@ -72,9 +72,10 @@ void execute_query(std::string& sparql, nlohmann::json& res) {
         finish = std::chrono::high_resolution_clock::now();
         res["results"]["bindings"] = results_str;
     }
-
     diff = finish - start;
-    res["time"] = diff.count();
+
+    res["results"]["binding_cnt"] = res["results"]["bindings"].size();
+    res["results"]["time_cost"] = diff.count();
 
     std::cout << cnt << " result(s)" << std::endl;
 }
@@ -93,7 +94,7 @@ void info(const httplib::Request& req, httplib::Response& res) {
     if (db_index) {
         data["triplets"] = db_index->triplet_cnt();
         data["predicates"] = db_index->predicate_cnt();
-        // data["entities"] = db_index->();
+        data["entities"] = db_index->entity_cnt();
     }
 
     nlohmann::json j;
@@ -102,11 +103,10 @@ void info(const httplib::Request& req, httplib::Response& res) {
 }
 
 void query(const httplib::Request& req, httplib::Response& res) {
-    // std::cout << "Catch query request from http://" << req.remote_addr << ":" << req.remote_port <<
-    // std::endl;
+    std::cout << "Catch query request from http://" << req.remote_addr << ":" << req.remote_port << std::endl;
 
     std::string sparql = req.get_param_value("query");
-    // std::cout << req.get_param_value("query") << std::endl;
+    std::cout << db_name << " " << req.get_param_value("query") << std::endl;
     nlohmann::json response;
     if (db_name != "")
         execute_query(sparql, response);
@@ -303,8 +303,7 @@ bool start_server(const std::string& ip, const std::string& port, const std::str
         db_name = db;
     }
 
-    svr.Get(base_url + "/sparql", query);   // query on RDF
-    svr.Post(base_url + "/sparql", query);  // query on RDF
+    svr.Get(base_url + "/sparql", query);  // query on RDF
     svr.Options(base_url + "/sparql",
                 [](const httplib::Request& req, httplib::Response& res) { res.status = 200; });
 

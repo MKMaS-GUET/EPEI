@@ -141,6 +141,8 @@ class IndexRetriever {
 
     uint predicate_cnt() { return dict_.predicate_cnt(); }
 
+    uint entity_cnt() { return dict_.subject_cnt() + dict_.object_cnt() + dict_.shared_cnt(); }
+
     std::shared_ptr<Result> GetSSet(uint pid) {
         // uint s_array_offset = predicate_index_[(pid - 1) * 4];
         // uint o_array_offset = predicate_index_[(pid - 1) * 4 + 2];
